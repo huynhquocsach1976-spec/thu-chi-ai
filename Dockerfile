@@ -2,10 +2,8 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# Khai báo không tương tác bàn phím khi apt-get install
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Cài đặt các thư viện hệ thống cần thiết cho EasyOCR / OpenCV
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libgl1 \
