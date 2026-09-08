@@ -2,7 +2,11 @@ import os
 import streamlit as st
 import requests
 
-API_URL = os.getenv("API_URL", "http://127.0.0.1:8000")
+# Lấy API_URL từ Secrets của Streamlit Cloud hoặc biến môi trường
+if "API_URL" in st.secrets:
+    API_URL = st.secrets["API_URL"]
+else:
+    API_URL = os.getenv("API_URL", "http://127.0.0.1:8000")
 
 st.set_page_config(page_title="Thu Chi AI", page_icon="💰", layout="wide")
 st.title("💰 Quản Lý Thu Chi AI")
@@ -17,7 +21,8 @@ monthly_limit = st.sidebar.number_input(
 )
 
 try:
-    res = requests.post(f"{API_URL}/budget-status", json={"monthly_limit": monthly_limit}, timeout=10)
+    # Tăng timeout lên 30s
+    res = requests.post(f"{API_URL}/budget-status", json={"monthly_limit": monthly_limit}, timeout=30)
     if res.status_code == 200:
         budget_data = res.json()
         
@@ -36,7 +41,7 @@ try:
             
         st.progress(min(budget_data["usage_percent"] / 100.0, 1.0))
 except Exception:
-    st.info("⚡ Hệ thống đang kết nối đến Backend...")
+    st.info("⚡ Hệ thống đang khởi động Server Render (vui lòng chờ vài giây)...")
 
 st.divider()
 
@@ -57,10 +62,14 @@ with tab_chat:
             st.write(user_input)
 
         try:
-            response = requests.post(f"{API_URL}/chat", json={"message": user_input}, timeout=10)
-            reply = response.json()["reply"] if response.status_code == 200 else "⚠️ Lỗi xử lý."
+            # Tăng timeout chat lên 45s để phòng khi Server vừa thức dậy
+            response = requests.post(f"{API_URL}/chat", json={"message": user_input}, timeout=45)
+            if response.status_code == 200:
+                reply = response.json()["reply"]
+            else:
+                reply = "⚠️ Server báo lỗi xử lý, thử lại sau vài giây."
         except Exception as err:
-            reply = f"❌ Không thể kết nối Backend: {err}"
+            reply = f"❌ Lỗi kết nối (Server đang khởi động lại): {err}"
 
         st.session_state.messages.append({"role": "assistant", "content": reply})
         with st.chat_message("assistant"):
@@ -73,22 +82,23 @@ with tab_ocr:
     if uploaded_file is not None:
         st.image(uploaded_file, caption="Ảnh đã chọn", use_container_width=True)
         if st.button("🔍 Quét & Ghi Nhận", type="primary"):
-            with st.spinner("Đang phân tích ảnh..."):
+            with st.spinner("Đang quét OCR (EasyOCR mất khoảng 30-45 giây)..."):
                 try:
                     files = {"file": (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)}
-                    res_ocr = requests.post(f"{API_URL}/scan-bill", files=files, timeout=20)
+                    # Tăng timeout OCR lên 60s để EasyOCR chạy xong
+                    res_ocr = requests.post(f"{API_URL}/scan-bill", files=files, timeout=60)
                     if res_ocr.status_code == 200:
                         st.success(res_ocr.json().get("reply"))
                         st.rerun()
                     else:
-                        st.error("Lỗi xử lý ảnh.")
+                        st.error("Lỗi xử lý ảnh từ máy chủ.")
                 except Exception as ex:
-                    st.error(f"Lỗi OCR: {ex}")
+                    st.error(f"Lỗi OCR Timeout: {ex}")
 
 with tab_history:
     st.subheader("Lịch sử giao dịch")
     try:
-        res_hist = requests.get(f"{API_URL}/history", timeout=10)
+        res_hist = requests.get(f"{API_URL}/history", timeout=30)
         if res_hist.status_code == 200:
             history_data = res_hist.json().get("data", [])
             if history_data:
