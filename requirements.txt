@@ -9,4 +9,3 @@ psycopg2-binary
 python-multipart
 pandas
 google-genai
-os.getenv("GEMINI_API_KEY")
