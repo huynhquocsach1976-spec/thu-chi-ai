@@ -14,6 +14,7 @@ if not st.session_state["user"]:
     st.title("🔐 Đăng nhập Thu Chi AI Pro")
     tab_login, tab_reg = st.tabs(["🔑 Đăng nhập", "📝 Đăng ký tài khoản"])
 
+    # --- TAB ĐĂNG NHẬP ---
     with tab_login:
         u = st.text_input("Tên đăng nhập", key="login_u")
         p = st.text_input("Mật khẩu", type="password", key="login_p")
@@ -26,12 +27,17 @@ if not st.session_state["user"]:
                         st.success("Đăng nhập thành công!")
                         st.rerun()
                     else:
-                        st.error("Lỗi: " + res.json().get("detail", "Đăng nhập thất bại"))
+                        try:
+                            err_msg = res.json().get("detail", "Đăng nhập thất bại")
+                        except Exception:
+                            err_msg = f"Lỗi Server (Mã {res.status_code}). Có thể Backend đang khởi động lại hoặc gặp sự cố kết nối Database."
+                        st.error(err_msg)
                 except Exception as e:
-                    st.error(f"Không thể kết nối Server: {e}")
+                    st.error(f"Không thể kết nối Server Backend: {e}")
             else:
                 st.warning("Vui lòng điền đủ thông tin!")
 
+    # --- TAB ĐĂNG KÝ ---
     with tab_reg:
         reg_u = st.text_input("Tên đăng nhập mới", key="reg_u")
         reg_p = st.text_input("Mật khẩu mới", type="password", key="reg_p")
@@ -42,9 +48,13 @@ if not st.session_state["user"]:
                     if res.status_code == 200:
                         st.success("Đăng ký thành công! Hãy chuyển sang tab Đăng nhập.")
                     else:
-                        st.error("Lỗi: " + res.json().get("detail", "Đăng ký thất bại"))
+                        try:
+                            err_msg = res.json().get("detail", "Đăng ký thất bại")
+                        except Exception:
+                            err_msg = f"Lỗi Server (Mã {res.status_code})."
+                        st.error(err_msg)
                 except Exception as e:
-                    st.error(f"Không thể kết nối Server: {e}")
+                    st.error(f"Không thể kết nối Server Backend: {e}")
             else:
                 st.warning("Vui lòng điền đủ thông tin!")
 
@@ -82,7 +92,11 @@ else:
                 if res.status_code == 200:
                     st.chat_message("assistant").write(res.json()["reply"])
                 else:
-                    st.error("Lỗi xử lý giao dịch!")
+                    try:
+                        err_msg = res.json().get("detail", "Lỗi xử lý giao dịch!")
+                    except Exception:
+                        err_msg = f"Lỗi Server (Mã {res.status_code})."
+                    st.error(err_msg)
             except Exception as e:
                 st.error(f"Lỗi kết nối: {e}")
 
@@ -110,8 +124,11 @@ else:
                         if res.status_code == 200:
                             st.success(res.json()["reply"])
                         else:
-                            detail_err = res.json().get("detail", "Lỗi xử lý hình ảnh!")
-                            st.error(f"Lỗi Server (Mã {res.status_code}): {detail_err}")
+                            try:
+                                detail_err = res.json().get("detail", "Lỗi xử lý hình ảnh!")
+                            except Exception:
+                                detail_err = f"Lỗi Server (Mã {res.status_code}). Vui lòng kiểm tra lại cấu hình Backend."
+                            st.error(detail_err)
                     except Exception as e:
                         st.error(f"Lỗi kết nối: {e}")
 
@@ -152,6 +169,8 @@ else:
                         st.dataframe(df, use_container_width=True)
                     else:
                         st.info("Chưa có lịch sử giao dịch nào.")
+                else:
+                    st.error(f"Lỗi tải dữ liệu từ Server (Mã {res.status_code})")
             except Exception as e:
                 st.error(f"Lỗi tải lịch sử: {e}")
 
