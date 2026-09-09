@@ -78,6 +78,7 @@ def parse_transaction(text: str):
 def analyze_bill_with_gemini(image_bytes: bytes, mime_type: str):
     """Sử dụng Google Gemini AI OCR để trích xuất hóa đơn"""
     if not GEMINI_API_KEY:
+        print("Cảnh báo: GEMINI_API_KEY chưa được thiết lập!")
         return None
 
     try:
@@ -87,7 +88,7 @@ def analyze_bill_with_gemini(image_bytes: bytes, mime_type: str):
         Phân tích hình ảnh hóa đơn/bill này và trả về kết quả định dạng JSON duy nhất.
         JSON phải bao gồm các trường sau:
         - "type": "expense" (nếu là chi tiêu/hóa đơn) hoặc "income" (nếu là biên nhận thu tiền)
-        - "amount": số tiền tổng cộng (kiểu số float/int, không có chữ hay ký tự tiền tệ)
+        - "amount": số tiền tổng cộng (kiểu số float hoặc int, không chứa chữ hay dấu phân cách tiền tệ)
         - "category": phân loại thích hợp ("Ăn uống", "Mua sắm", "Di chuyển", "Giải trí", "Hóa đơn dịch vụ", "Khác")
         - "note": mô tả ngắn gọn (ví dụ: "Thanh toán Cafe Highland", "Mua sắm siêu thị WinMart")
         
@@ -102,7 +103,6 @@ def analyze_bill_with_gemini(image_bytes: bytes, mime_type: str):
             ]
         )
         
-        # Làm sạch chuỗi JSON phản hồi
         clean_json = response.text.strip().replace("```json", "").replace("```", "").strip()
         data = json.loads(clean_json)
         return data
@@ -187,10 +187,10 @@ async def scan_bill(user_id: int = Form(...), file: UploadFile = File(...)):
         contents = await file.read()
         mime_type = file.content_type or "image/jpeg"
         
-        # 1. Thử phân tích qua Gemini AI OCR
+        # 1. Phân tích hình ảnh bằng AI OCR Gemini
         parsed = analyze_bill_with_gemini(contents, mime_type)
         
-        # 2. Dự phòng nếu Gemini không khả dụng hoặc chưa cấu hình API Key
+        # 2. Xử lý fallback nếu AI chưa phân tích được hoặc thiếu Key
         if not parsed:
             parsed = {
                 "type": "expense",
@@ -222,7 +222,7 @@ async def scan_bill(user_id: int = Form(...), file: UploadFile = File(...)):
                      f"• **Nội dung:** {parsed['note']}"
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Lỗi đọc hóa đơn: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Lỗi xử lý hóa đơn: {str(e)}")
 
 @app.get("/history/{user_id}")
 def get_history(user_id: int):
