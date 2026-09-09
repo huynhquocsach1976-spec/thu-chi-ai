@@ -3,15 +3,15 @@ import requests
 
 API_URL = "https://thu-chi-ai.onrender.com"
 
-st.set_page_config(page_title="Thu Chi AI", page_icon="💰")
+st.set_page_config(page_title="Thu Chi AI Pro", page_icon="💎", layout="wide")
 
 if "user" not in st.session_state:
     st.session_state["user"] = None
 
 # --- MÀN HÌNH ĐĂNG NHẬP / ĐĂNG KÝ ---
 if not st.session_state["user"]:
-    st.title("🔐 Đăng nhập Thu Chi AI")
-    tab_login, tab_reg = st.tabs(["Đăng nhập", "Đăng ký tài khoản"])
+    st.title("🔐 Đăng nhập Thu Chi AI Pro")
+    tab_login, tab_reg = st.tabs(["🔑 Đăng nhập", "📝 Đăng ký tài khoản"])
 
     with tab_login:
         u = st.text_input("Tên đăng nhập", key="login_u")
@@ -39,7 +39,7 @@ if not st.session_state["user"]:
                 try:
                     res = requests.post(f"{API_URL}/register", json={"username": reg_u, "password": reg_p})
                     if res.status_code == 200:
-                        st.success("Đăng ký thành công! Hãy quay lại tab Đăng nhập.")
+                        st.success("Đăng ký thành công! Hãy chuyển sang tab Đăng nhập.")
                     else:
                         st.error("Lỗi: " + res.json().get("detail", "Đăng ký thất bại"))
                 except Exception as e:
@@ -47,23 +47,29 @@ if not st.session_state["user"]:
             else:
                 st.warning("Vui lòng điền đủ thông tin!")
 
-# --- MÀN HÌNH QUẢN LÝ THU CHI ---
+# --- MÀN HÌNH CHÍNH APP ---
 else:
     user = st.session_state["user"]
     
-    st.sidebar.title("👤 Tài khoản")
-    st.sidebar.write(f"Xin chào: **{user['username']}**")
-    if st.sidebar.button("Đăng xuất", use_container_width=True):
+    st.sidebar.title("👤 Tài khoản Pro")
+    st.sidebar.info(f"Xin chào: **{user['username']}**")
+    if st.sidebar.button("🚪 Đăng xuất", use_container_width=True):
         st.session_state["user"] = None
         st.rerun()
 
-    st.title("💰 Quản Lý Thu Chi AI")
+    st.title("💎 Quản Lý Thu Chi AI Pro")
 
-    tab_chat, tab_history = st.tabs(["💬 Nhập Thu Chi", "📜 Lịch sử"])
+    tab_chat, tab_history, tab_budget = st.tabs([
+        "💬 Nhập Thu Chi", 
+        "📜 Lịch sử Giao dịch", 
+        "🎯 Định mức & Cảnh báo Pro"
+    ])
 
+    # --- TAB 1: NHẬP THU CHI ---
     with tab_chat:
-        st.write("Nhập chi tiêu hoặc thu nhập của bạn (ví dụ: `Cơm 25k`, `Lương 15tr`):")
-        msg = st.chat_input("Nhập ở đây...")
+        st.subheader("Trợ lý AI Nhận diện Thu Chi")
+        st.caption("Ví dụ: `Cơm trưa 35k`, `Xăng xe 50k`, `Lương tháng 15tr`")
+        msg = st.chat_input("Nhập thông tin thu chi...")
         if msg:
             st.chat_message("user").write(msg)
             try:
@@ -74,12 +80,14 @@ else:
                 if res.status_code == 200:
                     st.chat_message("assistant").write(res.json()["reply"])
                 else:
-                    st.error("Lỗi xử lý!")
+                    st.error("Lỗi xử lý giao dịch!")
             except Exception as e:
                 st.error(f"Lỗi kết nối: {e}")
 
+    # --- TAB 2: LỊCH SỬ ---
     with tab_history:
-        if st.button("Làm mới lịch sử"):
+        st.subheader("Lịch sử giao dịch gần đây")
+        if st.button("🔄 Tải lại lịch sử"):
             try:
                 res = requests.get(f"{API_URL}/history/{user['user_id']}")
                 if res.status_code == 200:
@@ -90,24 +98,28 @@ else:
                         st.info("Chưa có lịch sử giao dịch nào.")
             except Exception as e:
                 st.error(f"Lỗi tải lịch sử: {e}")
-    # --- CẬP NHẬT TRONG TAB GIAO DIỆN CỦA APP.PY ---
 
-    # Thay đổi đoạn tạo Tab:
-    tab_chat, tab_history, tab_budget = st.tabs(["💬 Nhập Thu Chi", "📜 Lịch sử", "🎯 Định mức & Cảnh báo"])
-
-    # (Giữ nguyên nội dung tab_chat và tab_history cũ)
-
-    # NỘI DUNG TAB ĐỊNH MỨC & CẢNH BÁO
+    # --- TAB 3: ĐỊNH MỨC & CẢNH BÁO PRO ---
     with tab_budget:
-        st.subheader("⚙️ Cấu hình Định mức Tháng")
-        col1, col2 = st.columns(2)
+        st.subheader("🎯 Cấu hình Hạn mức & Mục tiêu Tài chính")
         
-        with col1:
-            exp_limit = st.number_input("Hạn mức Chi tiêu tháng (VNĐ)", min_value=0, value=10000000, step=500000)
-        with col2:
-            inc_target = st.number_input("Mục tiêu Thu nhập tháng (VNĐ)", min_value=0, value=20000000, step=1000000)
+        c_exp, c_inc = st.columns(2)
+        with c_exp:
+            exp_limit = st.number_input(
+                "🔴 Hạn mức Chi tiêu Tối đa (VNĐ)", 
+                min_value=100000, 
+                value=10000000, 
+                step=500000
+            )
+        with c_inc:
+            inc_target = st.number_input(
+                "🟢 Mục tiêu Thu nhập Tháng (VNĐ)", 
+                min_value=100000, 
+                value=20000000, 
+                step=1000000
+            )
 
-        if st.button("Phân tích & Kiểm tra Cảnh báo", use_container_width=True):
+        if st.button("📊 Phân tích & Phản hồi Cảnh báo Pro", use_container_width=True, type="primary"):
             try:
                 res = requests.post(
                     f"{API_URL}/budget-status",
@@ -120,19 +132,18 @@ else:
                 if res.status_code == 200:
                     data = res.json()
                     
-                    st.divider()
-                    st.subheader("📊 Báo cáo Tổng quan")
+                    st.markdown("---")
+                    st.subheader("📈 Báo cáo Tài chính Tháng")
                     
-                    # Cột chỉ số
-                    c1, c2, c3 = st.columns(3)
-                    c1.metric("Tổng Thu Nhập", f"{data['total_income']:,.0f} VNĐ")
-                    c2.metric("Tổng Chi Tiêu", f"{data['total_expense']:,.0f} VNĐ")
-                    c3.metric("Số Dư Thực Tế", f"{data['balance']:,.0f} VNĐ")
+                    m1, m2, m3 = st.columns(3)
+                    m1.metric("Tổng Thu Nhập", f"{data['total_income']:,.0f} VNĐ")
+                    m2.metric("Tổng Chi Tiêu", f"{data['total_expense']:,.0f} VNĐ")
+                    m3.metric("Số Dư Ròng", f"{data['balance']:,.0f} VNĐ")
 
-                    st.divider()
+                    st.markdown("---")
                     
-                    # Cảnh báo chi tiêu
-                    st.write("### 🔴 Cảnh báo Chi tiêu")
+                    # Thanh Hạn mức Chi tiêu
+                    st.write("### 🔴 Hạn mức Chi tiêu")
                     if data["expense_status"] == "danger":
                         st.error(data["expense_msg"])
                     elif data["expense_status"] == "warning":
@@ -140,12 +151,14 @@ else:
                     else:
                         st.success(data["expense_msg"])
                     
-                    st.progress(min(data["expense_pct"] / 100, 1.0))
+                    st.progress(min(data["expense_pct"] / 100.0, 1.0))
+                    st.caption(f"Đã dùng: **{data['expense_pct']}%** hạn mức cho phép.")
 
-                    # Cảnh báo / Tiến độ thu nhập
-                    st.write("### 🟢 Tiến độ Thu nhập Mục tiêu")
+                    # Thanh Tiến độ Thu nhập
+                    st.write("### 🟢 Mục tiêu Thu nhập")
                     st.info(data["income_msg"])
-                    st.progress(min(data["income_pct"] / 100, 1.0))
+                    st.progress(min(data["income_pct"] / 100.0, 1.0))
+                    st.caption(f"Tỷ lệ hoàn thành: **{data['income_pct']}%** mục tiêu.")
 
                 else:
                     st.error("Không thể lấy dữ liệu phân tích!")
