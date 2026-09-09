@@ -142,22 +142,17 @@ def chat_process(msg: ChatMessage):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi Database: {str(e)}")
 
-# --- XỬ LÝ SCAN BILL QUA CAMERA / TẢI ẢNH ---
 @app.post("/scan-bill")
 async def scan_bill(user_id: int = Form(...), file: UploadFile = File(...)):
     try:
         contents = await file.read()
         image = Image.open(io.BytesIO(contents))
-        
-        # Nhận diện kích thước ảnh xác nhận ảnh hợp lệ
         width, height = image.size
         
-        # Mẫu bóc tách giả định số tiền từ hóa đơn camera (Có thể kết hợp Tesseract OCR)
         extracted_note = f"Hóa đơn chụp camera ({file.filename})"
         parsed = parse_transaction(extracted_note)
         
         if not parsed:
-            # Mặc định lấy giá trị gợi ý nếu chưa đọc được văn bản thuần
             parsed = {
                 "type": "expense",
                 "amount": 50000.0,
