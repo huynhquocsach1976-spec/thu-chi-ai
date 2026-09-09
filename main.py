@@ -6,9 +6,6 @@ from fastapi import FastAPI, File, UploadFile, HTTPException
 from pydantic import BaseModel
 import psycopg2
 from psycopg2.extras import RealDictCursor
-@app.post("/register")
-@app.post("/login")
-@app.post("/budget-status")
 
 app = FastAPI(title="Thu Chi AI Backend")
 
@@ -30,9 +27,10 @@ class ChatMessage(BaseModel):
     message: str
     user_id: int
 
-class BudgetRequest(BaseModel):
-    monthly_limit: float
+class BudgetSettingRequest(BaseModel):
     user_id: int
+    monthly_expense_limit: float
+    monthly_income_target: float
 
 def parse_transaction(text: str):
     match = re.search(r"(\d+[\d\.,]*)\s*(k|tr|triệu|d|đ|vnd|vnđ)?", text, re.IGNORECASE)
@@ -162,12 +160,6 @@ def get_history(user_id: int):
         return {"total": len(rows), "data": rows}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi Database: {str(e)}")
-# --- BỔ SUNG VÀO CUỐI FILE MAIN.PY ---
-
-class BudgetSettingRequest(BaseModel):
-    user_id: int
-    monthly_expense_limit: float
-    monthly_income_target: float
 
 @app.post("/budget-status")
 def budget_status(req: BudgetSettingRequest):
@@ -175,7 +167,6 @@ def budget_status(req: BudgetSettingRequest):
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        # Truy vấn an toàn lấy tổng thu/chi theo user_id
         cur.execute(
             """
             SELECT type, SUM(CAST(amount AS FLOAT)) as total
@@ -198,21 +189,19 @@ def budget_status(req: BudgetSettingRequest):
                 elif r["type"] == "expense" and r["total"] is not None:
                     total_expense = float(r["total"])
 
-        # Tính phần trăm hạn mức chi
         expense_pct = round((total_expense / req.monthly_expense_limit) * 100, 1) if req.monthly_expense_limit > 0 else 0.0
         
         expense_status = "normal"
-        expense_msg = "Chi tiêu đang nằm trong tầm kiểm soát."
+        expense_msg = "Chi tiêu an toàn, đang nằm trong hạn mức."
         if expense_pct >= 100:
             expense_status = "danger"
-            expense_msg = f"⚠️ VƯỢT BÁO ĐỘNG! Bạn đã chi {total_expense:,.0f} VNĐ ({expense_pct}% hạn mức tháng)!"
+            expense_msg = f"🚨 BÁO ĐỘNG: Đã chi {total_expense:,.0f} VNĐ ({expense_pct}% hạn mức)! Bạn đã vượt ngân sách tháng!"
         elif expense_pct >= 80:
             expense_status = "warning"
-            expense_msg = f"⚡ CẢNH BÁO: Bạn đã chi {total_expense:,.0f} VNĐ ({expense_pct}% hạn mức tháng)!"
+            expense_msg = f"⚠️ CẢNH BÁO: Đã chi {total_expense:,.0f} VNĐ ({expense_pct}% hạn mức)! Sắp cán mốc tối đa."
 
-        # Tính phần trăm mục tiêu thu nhập
         income_pct = round((total_income / req.monthly_income_target) * 100, 1) if req.monthly_income_target > 0 else 0.0
-        income_msg = f"Bạn đã đạt {income_pct}% mục tiêu thu nhập tháng ({total_income:,.0f} / {req.monthly_income_target:,.0f} VNĐ)."
+        income_msg = f"Đã thu về {total_income:,.0f} / {req.monthly_income_target:,.0f} VNĐ (Đạt {income_pct}% mục tiêu)."
 
         return {
             "total_income": total_income,
