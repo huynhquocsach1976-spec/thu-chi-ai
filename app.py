@@ -3,7 +3,7 @@ import requests
 
 API_URL = "https://thu-chi-ai.onrender.com"
 
-st.set_page_config(page_title="Thu Chi AI Pro", page_icon="💎", layout="wide")
+st.set_page_config(page_title="Thu Chi AI Pro", page_icon="📷", layout="wide")
 
 if "user" not in st.session_state:
     st.session_state["user"] = None
@@ -59,8 +59,9 @@ else:
 
     st.title("💎 Quản Lý Thu Chi AI Pro")
 
-    tab_chat, tab_history, tab_budget = st.tabs([
+    tab_chat, tab_camera, tab_history, tab_budget = st.tabs([
         "💬 Nhập Thu Chi", 
+        "📷 Quét Bill Camera",
         "📜 Lịch sử Giao dịch", 
         "🎯 Định mức & Cảnh báo Pro"
     ])
@@ -84,7 +85,35 @@ else:
             except Exception as e:
                 st.error(f"Lỗi kết nối: {e}")
 
-    # --- TAB 2: LỊCH SỬ ---
+    # --- TAB 2: QUÉT BILL BẰNG CAMERA TRỰC TIẾP ---
+    with tab_camera:
+        st.subheader("📸 Quét Hóa Đơn Trực Tiếp Bằng Camera / Tải Ảnh")
+        
+        mode = st.radio("Chọn phương thức nhập ảnh:", ["📷 Chụp trực tiếp từ Camera", "📁 Tải ảnh Bill từ máy"], horizontal=True)
+        
+        img_file = None
+        if "Camera" in mode:
+            img_file = st.camera_input("Chụp ảnh hóa đơn của bạn")
+        else:
+            img_file = st.file_uploader("Chọn ảnh Hóa đơn (PNG, JPG, JPEG)", type=["png", "jpg", "jpeg"])
+
+        if img_file is not None:
+            st.image(img_file, caption="Ảnh Bill đã chọn", use_column_width=True)
+            if st.button("🚀 Quét & Tự Động Lưu Giao Dịch", type="primary", use_container_width=True):
+                with st.spinner("Đang phân tích hóa đơn..."):
+                    try:
+                        files = {"file": (img_file.name, img_file.getvalue(), img_file.type)}
+                        data = {"user_id": user["user_id"]}
+                        res = requests.post(f"{API_URL}/scan-bill", data=data, files=files)
+                        
+                        if res.status_code == 200:
+                            st.success(res.json()["reply"])
+                        else:
+                            st.error("Lỗi xử lý hình ảnh!")
+                    except Exception as e:
+                        st.error(f"Lỗi kết nối: {e}")
+
+    # --- TAB 3: LỊCH SỬ ---
     with tab_history:
         st.subheader("Lịch sử giao dịch gần đây")
         if st.button("🔄 Tải lại lịch sử"):
@@ -99,7 +128,7 @@ else:
             except Exception as e:
                 st.error(f"Lỗi tải lịch sử: {e}")
 
-    # --- TAB 3: ĐỊNH MỨC & CẢNH BÁO PRO ---
+    # --- TAB 4: ĐỊNH MỨC & CẢNH BÁO PRO ---
     with tab_budget:
         st.subheader("🎯 Cấu hình Hạn mức & Mục tiêu Tài chính")
         
@@ -142,7 +171,6 @@ else:
 
                     st.markdown("---")
                     
-                    # Thanh Hạn mức Chi tiêu
                     st.write("### 🔴 Hạn mức Chi tiêu")
                     if data["expense_status"] == "danger":
                         st.error(data["expense_msg"])
@@ -154,7 +182,6 @@ else:
                     st.progress(min(data["expense_pct"] / 100.0, 1.0))
                     st.caption(f"Đã dùng: **{data['expense_pct']}%** hạn mức cho phép.")
 
-                    # Thanh Tiến độ Thu nhập
                     st.write("### 🟢 Mục tiêu Thu nhập")
                     st.info(data["income_msg"])
                     st.progress(min(data["income_pct"] / 100.0, 1.0))
