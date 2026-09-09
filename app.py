@@ -98,7 +98,8 @@ else:
             img_file = st.file_uploader("Chọn ảnh Hóa đơn (PNG, JPG, JPEG)", type=["png", "jpg", "jpeg"])
 
         if img_file is not None:
-            st.image(img_file, caption="Ảnh Bill đã chọn", use_column_width=True)
+            # Đã sửa lỗi: Dùng use_container_width thay cho use_column_width
+            st.image(img_file, caption="Ảnh Bill đã chọn", use_container_width=True)
             if st.button("🚀 Quét & Tự Động Lưu Giao Dịch", type="primary", use_container_width=True):
                 with st.spinner("Đang phân tích hóa đơn..."):
                     try:
