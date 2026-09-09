@@ -101,16 +101,17 @@ else:
         if img_file is not None:
             st.image(img_file, caption="Ảnh Bill đã chọn", use_container_width=True)
             if st.button("🚀 Quét & Tự Động Lưu Giao Dịch", type="primary", use_container_width=True):
-                with st.spinner("Đang phân tích hóa đơn..."):
+                with st.spinner("Đang phân tích hóa đơn bằng AI..."):
                     try:
-                        files = {"file": (img_file.name, img_file.getvalue(), img_file.type)}
+                        files = {"file": (img_file.name, img_file.getvalue(), img_file.type or "image/jpeg")}
                         data = {"user_id": user["user_id"]}
                         res = requests.post(f"{API_URL}/scan-bill", data=data, files=files)
                         
                         if res.status_code == 200:
                             st.success(res.json()["reply"])
                         else:
-                            st.error("Lỗi xử lý hình ảnh!")
+                            detail_err = res.json().get("detail", "Lỗi xử lý hình ảnh!")
+                            st.error(f"Lỗi Server (Mã {res.status_code}): {detail_err}")
                     except Exception as e:
                         st.error(f"Lỗi kết nối: {e}")
 
@@ -144,7 +145,7 @@ else:
                         }
                         df = df.rename(columns=column_mapping)
                         
-                        # Định dạng hiển thị số tiền có dấu phẩy phân cách
+                        # Định dạng số tiền có dấu phẩy phân cách hàng nghìn
                         if "Số Tiền (VNĐ)" in df.columns:
                             df["Số Tiền (VNĐ)"] = df["Số Tiền (VNĐ)"].apply(lambda x: f"{x:,.0f}" if pd.notnull(x) else x)
 
