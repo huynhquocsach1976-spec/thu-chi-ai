@@ -1,5 +1,6 @@
 import os
 import re
+import hashlib
 from datetime import datetime
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from pydantic import BaseModel
@@ -8,7 +9,6 @@ from psycopg2.extras import RealDictCursor
 
 app = FastAPI(title="Thu Chi AI Backend")
 
-# Lấy DATABASE_URL từ Render Environment
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 def get_db_connection():
@@ -16,15 +16,23 @@ def get_db_connection():
         raise Exception("Chưa cấu hình DATABASE_URL trên Render Environment!")
     return psycopg2.connect(DATABASE_URL, sslmode="require")
 
+def hash_password(password: str) -> str:
+    return hashlib.sha256(password.encode()).hexdigest()
+
+class AuthRequest(BaseModel):
+    username: str
+    password: str
+
 class ChatMessage(BaseModel):
     message: str
+    user_id: int
 
 class BudgetRequest(BaseModel):
     monthly_limit: float
+    user_id: int
 
 def parse_transaction(text: str):
-    # Regex nhận diện số tiền (vd: 17k, 17.000, 17000)
-    match = re.search(r"(\d+[\d\.,]*)\s*(k|k|tr|triệu|d|đ|vnd|vnđ)?", text, re.IGNORECASE)
+    match = re.search(r"(\d+[\d\.,]*)\s*(k|tr|triệu|d|đ|vnd|vnđ)?", text, re.IGNORECASE)
     if not match:
         return None
     
@@ -41,12 +49,10 @@ def parse_transaction(text: str):
     elif unit in ["tr", "triệu"]:
         amount *= 1000000
 
-    # Phân loại Thu / Chi
     income_keywords = ["lương", "thưởng", "thu", "nhận", "bán"]
     is_income = any(kw in text.lower() for kw in income_keywords)
     t_type = "income" if is_income else "expense"
 
-    # Phân loại danh mục
     category = "Khác"
     if any(kw in text.lower() for kw in ["cơm", "phở", "bún", "ăn", "uống", "cafe", "trà"]):
         category = "Ăn uống"
@@ -66,21 +72,58 @@ def parse_transaction(text: str):
 def home():
     return {"status": "ok", "message": "Thu Chi AI Backend is Running"}
 
+@app.post("/register")
+def register(req: AuthRequest):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    pwd_hashed = hash_password(req.password)
+    try:
+        cur.execute(
+            "INSERT INTO users (username, password_hash) VALUES (%s, %s) RETURNING id;",
+            (req.username.lower().strip(), pwd_hashed)
+        )
+        user_id = cur.fetchone()[0]
+        conn.commit()
+        return {"status": "success", "user_id": user_id, "username": req.username}
+    except Exception:
+        conn.rollback()
+        raise HTTPException(status_code=400, detail="Tên tài khoản đã tồn tại!")
+    finally:
+        cur.close()
+        conn.close()
+
+@app.post("/login")
+def login(req: AuthRequest):
+    conn = get_db_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    pwd_hashed = hash_password(req.password)
+    cur.execute(
+        "SELECT id, username FROM users WHERE username = %s AND password_hash = %s;",
+        (req.username.lower().strip(), pwd_hashed)
+    )
+    user = cur.fetchone()
+    cur.close()
+    conn.close()
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="Sai tài khoản hoặc mật khẩu!")
+    return {"status": "success", "user_id": user["id"], "username": user["username"]}
+
 @app.post("/chat")
 def chat_process(msg: ChatMessage):
     parsed = parse_transaction(msg.message)
     if not parsed:
-        return {"reply": "Chưa nhận diện được số tiền. Bạn thử nhập ví dụ: 'Cơm 17k' hoặc 'Lương 15tr' nhé!"}
+        return {"reply": "Chưa nhận diện được số tiền. Ví dụ: 'Cơm 17k' hoặc 'Lương 15tr'"}
     
     try:
         conn = get_db_connection()
         cur = conn.cursor()
         cur.execute(
             """
-            INSERT INTO transactions (type, amount, category, note)
-            VALUES (%s, %s, %s, %s) RETURNING id;
+            INSERT INTO transactions (type, amount, category, note, user_id)
+            VALUES (%s, %s, %s, %s, %s);
             """,
-            (parsed["type"], parsed["amount"], parsed["category"], parsed["note"])
+            (parsed["type"], parsed["amount"], parsed["category"], parsed["note"], msg.user_id)
         )
         conn.commit()
         cur.close()
@@ -96,17 +139,19 @@ def chat_process(msg: ChatMessage):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi Database: {str(e)}")
 
-@app.get("/history")
-def get_history():
+@app.get("/history/{user_id}")
+def get_history(user_id: int):
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT id, type, CAST(amount AS FLOAT), category, note, date FROM transactions ORDER BY id DESC LIMIT 50;")
+        cur.execute(
+            "SELECT id, type, CAST(amount AS FLOAT), category, note, date FROM transactions WHERE user_id = %s ORDER BY id DESC LIMIT 50;",
+            (user_id,)
+        )
         rows = cur.fetchall()
         cur.close()
         conn.close()
         
-        # Chuyển đổi datetime sang string
         for r in rows:
             if isinstance(r.get("date"), datetime):
                 r["date"] = r["date"].strftime("%Y-%m-%d %H:%M:%S")
@@ -114,51 +159,3 @@ def get_history():
         return {"total": len(rows), "data": rows}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi Database: {str(e)}")
-
-@app.post("/budget-status")
-def budget_status(req: BudgetRequest):
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT type, CAST(amount AS FLOAT) FROM transactions;")
-        rows = cur.fetchall()
-        cur.close()
-        conn.close()
-
-        total_income = sum(r["amount"] for r in rows if r["type"] == "income")
-        total_expense = sum(r["amount"] for r in rows if r["type"] == "expense")
-        balance = total_income - total_expense
-        
-        usage_pct = round((total_expense / req.monthly_limit) * 100, 1) if req.monthly_limit > 0 else 0
-        
-        status = "normal"
-        msg = "Chi tiêu trong mức an toàn."
-        if usage_pct >= 100:
-            status = "danger"
-            msg = "⚠️ Bạn đã vượt hạn mức chi tiêu tháng!"
-        elif usage_pct >= 80:
-            status = "warning"
-            msg = "⚡ Cảnh báo: Bạn đã dùng hơn 80% hạn mức chi tiêu!"
-
-        return {
-            "total_income": total_income,
-            "total_expense": total_expense,
-            "balance": balance,
-            "usage_percent": usage_pct,
-            "status": status,
-            "message": msg
-        }
-    except Exception as e:
-        return {
-            "total_income": 0,
-            "total_expense": 0,
-            "balance": 0,
-            "usage_percent": 0,
-            "status": "normal",
-            "message": f"Chưa có dữ liệu hoặc lỗi kết nối: {str(e)}"
-        }
-
-@app.post("/scan-bill")
-async def scan_bill(file: UploadFile = File(...)):
-    # Trả về kết quả mẫu OCR cơ bản
-    return {"reply": "Đã nhận ảnh hóa đơn thành công! (Tính năng OCR đang sẵn sàng)"}
