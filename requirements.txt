@@ -7,3 +7,4 @@ pillow
 easyocr
 psycopg2-binary
 python-multipart
+pandas
