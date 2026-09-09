@@ -1,5 +1,6 @@
 import streamlit as st
 import requests
+import pandas as pd
 
 API_URL = "https://thu-chi-ai.onrender.com"
 
@@ -98,7 +99,6 @@ else:
             img_file = st.file_uploader("Chọn ảnh Hóa đơn (PNG, JPG, JPEG)", type=["png", "jpg", "jpeg"])
 
         if img_file is not None:
-            # Đã sửa lỗi: Dùng use_container_width thay cho use_column_width
             st.image(img_file, caption="Ảnh Bill đã chọn", use_container_width=True)
             if st.button("🚀 Quét & Tự Động Lưu Giao Dịch", type="primary", use_container_width=True):
                 with st.spinner("Đang phân tích hóa đơn..."):
@@ -114,16 +114,41 @@ else:
                     except Exception as e:
                         st.error(f"Lỗi kết nối: {e}")
 
-    # --- TAB 3: LỊCH SỬ ---
+    # --- TAB 3: LỊCH SỬ GIAO DỊCH (TIẾNG VIỆT) ---
     with tab_history:
-        st.subheader("Lịch sử giao dịch gần đây")
+        st.subheader("📜 Lịch sử Giao dịch Dạng Bảng")
         if st.button("🔄 Tải lại lịch sử"):
             try:
                 res = requests.get(f"{API_URL}/history/{user['user_id']}")
                 if res.status_code == 200:
                     data = res.json().get("data", [])
                     if data:
-                        st.dataframe(data, use_container_width=True)
+                        df = pd.DataFrame(data)
+                        
+                        # Việt hóa giá trị Loại giao dịch
+                        type_mapping = {
+                            "income": "🟢 Thu nhập",
+                            "expense": "🔴 Chi tiêu"
+                        }
+                        if "type" in df.columns:
+                            df["type"] = df["type"].map(lambda x: type_mapping.get(x, x))
+                        
+                        # Việt hóa tên các Tiêu đề Cột
+                        column_mapping = {
+                            "id": "Mã GD",
+                            "type": "Loại Giao Dịch",
+                            "amount": "Số Tiền (VNĐ)",
+                            "category": "Danh Mục",
+                            "note": "Ghi Chú",
+                            "date": "Thời Gian"
+                        }
+                        df = df.rename(columns=column_mapping)
+                        
+                        # Định dạng hiển thị số tiền có dấu phẩy phân cách
+                        if "Số Tiền (VNĐ)" in df.columns:
+                            df["Số Tiền (VNĐ)"] = df["Số Tiền (VNĐ)"].apply(lambda x: f"{x:,.0f}" if pd.notnull(x) else x)
+
+                        st.dataframe(df, use_container_width=True)
                     else:
                         st.info("Chưa có lịch sử giao dịch nào.")
             except Exception as e:
