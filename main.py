@@ -6,6 +6,8 @@ from fastapi import FastAPI, File, UploadFile, HTTPException
 from pydantic import BaseModel
 import psycopg2
 from psycopg2.extras import RealDictCursor
+@app.post("/register")
+@app.post("/login")
 
 app = FastAPI(title="Thu Chi AI Backend")
 
