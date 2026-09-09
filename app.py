@@ -90,3 +90,64 @@ else:
                         st.info("Chưa có lịch sử giao dịch nào.")
             except Exception as e:
                 st.error(f"Lỗi tải lịch sử: {e}")
+    # --- CẬP NHẬT TRONG TAB GIAO DIỆN CỦA APP.PY ---
+
+    # Thay đổi đoạn tạo Tab:
+    tab_chat, tab_history, tab_budget = st.tabs(["💬 Nhập Thu Chi", "📜 Lịch sử", "🎯 Định mức & Cảnh báo"])
+
+    # (Giữ nguyên nội dung tab_chat và tab_history cũ)
+
+    # NỘI DUNG TAB ĐỊNH MỨC & CẢNH BÁO
+    with tab_budget:
+        st.subheader("⚙️ Cấu hình Định mức Tháng")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            exp_limit = st.number_input("Hạn mức Chi tiêu tháng (VNĐ)", min_value=0, value=10000000, step=500000)
+        with col2:
+            inc_target = st.number_input("Mục tiêu Thu nhập tháng (VNĐ)", min_value=0, value=20000000, step=1000000)
+
+        if st.button("Phân tích & Kiểm tra Cảnh báo", use_container_width=True):
+            try:
+                res = requests.post(
+                    f"{API_URL}/budget-status",
+                    json={
+                        "user_id": user["user_id"],
+                        "monthly_expense_limit": float(exp_limit),
+                        "monthly_income_target": float(inc_target)
+                    }
+                )
+                if res.status_code == 200:
+                    data = res.json()
+                    
+                    st.divider()
+                    st.subheader("📊 Báo cáo Tổng quan")
+                    
+                    # Cột chỉ số
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("Tổng Thu Nhập", f"{data['total_income']:,.0f} VNĐ")
+                    c2.metric("Tổng Chi Tiêu", f"{data['total_expense']:,.0f} VNĐ")
+                    c3.metric("Số Dư Thực Tế", f"{data['balance']:,.0f} VNĐ")
+
+                    st.divider()
+                    
+                    # Cảnh báo chi tiêu
+                    st.write("### 🔴 Cảnh báo Chi tiêu")
+                    if data["expense_status"] == "danger":
+                        st.error(data["expense_msg"])
+                    elif data["expense_status"] == "warning":
+                        st.warning(data["expense_msg"])
+                    else:
+                        st.success(data["expense_msg"])
+                    
+                    st.progress(min(data["expense_pct"] / 100, 1.0))
+
+                    # Cảnh báo / Tiến độ thu nhập
+                    st.write("### 🟢 Tiến độ Thu nhập Mục tiêu")
+                    st.info(data["income_msg"])
+                    st.progress(min(data["income_pct"] / 100, 1.0))
+
+                else:
+                    st.error("Không thể lấy dữ liệu phân tích!")
+            except Exception as e:
+                st.error(f"Lỗi kết nối: {e}")
