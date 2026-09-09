@@ -10,7 +10,7 @@ app = FastAPI(title="Private Financial AI Agent")
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL", 
-    "YOUR_SUPABASE_DATABASE_URL"  # Thay bằng URI Supabase của bạn
+    "postgresql://postgres:MatKhauCuaBan@db.xxxx.supabase.co:5432/postgres" # Dán URI vào đây
 )
 
 def get_db_connection():
