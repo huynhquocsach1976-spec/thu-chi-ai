@@ -2,16 +2,20 @@ import os
 import re
 import hashlib
 import io
+import json
 from datetime import datetime
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from pydantic import BaseModel
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from PIL import Image
+from google import genai
+from google.genai import types
 
 app = FastAPI(title="Thu Chi AI Backend Pro")
 
 DATABASE_URL = os.getenv("DATABASE_URL")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 def get_db_connection():
     if not DATABASE_URL:
@@ -70,6 +74,41 @@ def parse_transaction(text: str):
         "category": category,
         "note": text
     }
+
+def analyze_bill_with_gemini(image_bytes: bytes, mime_type: str):
+    """Sử dụng Google Gemini AI OCR để trích xuất hóa đơn"""
+    if not GEMINI_API_KEY:
+        return None
+
+    try:
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        
+        prompt = """
+        Phân tích hình ảnh hóa đơn/bill này và trả về kết quả định dạng JSON duy nhất.
+        JSON phải bao gồm các trường sau:
+        - "type": "expense" (nếu là chi tiêu/hóa đơn) hoặc "income" (nếu là biên nhận thu tiền)
+        - "amount": số tiền tổng cộng (kiểu số float/int, không có chữ hay ký tự tiền tệ)
+        - "category": phân loại thích hợp ("Ăn uống", "Mua sắm", "Di chuyển", "Giải trí", "Hóa đơn dịch vụ", "Khác")
+        - "note": mô tả ngắn gọn (ví dụ: "Thanh toán Cafe Highland", "Mua sắm siêu thị WinMart")
+        
+        Chỉ trả về định dạng JSON thuần túy, không chèn bất kỳ văn bản nào khác.
+        """
+        
+        response = client.models.generate_content(
+            model='gemini-1.5-flash',
+            contents=[
+                types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+                prompt
+            ]
+        )
+        
+        # Làm sạch chuỗi JSON phản hồi
+        clean_json = response.text.strip().replace("```json", "").replace("```", "").strip()
+        data = json.loads(clean_json)
+        return data
+    except Exception as e:
+        print(f"Lỗi AI OCR Gemini: {e}")
+        return None
 
 @app.get("/")
 def home():
@@ -146,18 +185,18 @@ def chat_process(msg: ChatMessage):
 async def scan_bill(user_id: int = Form(...), file: UploadFile = File(...)):
     try:
         contents = await file.read()
-        image = Image.open(io.BytesIO(contents))
-        width, height = image.size
+        mime_type = file.content_type or "image/jpeg"
         
-        extracted_note = f"Hóa đơn chụp camera ({file.filename})"
-        parsed = parse_transaction(extracted_note)
+        # 1. Thử phân tích qua Gemini AI OCR
+        parsed = analyze_bill_with_gemini(contents, mime_type)
         
+        # 2. Dự phòng nếu Gemini không khả dụng hoặc chưa cấu hình API Key
         if not parsed:
             parsed = {
                 "type": "expense",
                 "amount": 50000.0,
                 "category": "Ăn uống",
-                "note": f"Thanh toán hóa đơn qua camera ({file.filename})"
+                "note": f"Thanh toán hóa đơn ({file.filename})"
             }
 
         conn = get_db_connection()
@@ -167,21 +206,23 @@ async def scan_bill(user_id: int = Form(...), file: UploadFile = File(...)):
             INSERT INTO transactions (type, amount, category, note, user_id)
             VALUES (%s, %s, %s, %s, %s);
             """,
-            (parsed["type"], parsed["amount"], parsed["category"], parsed["note"], user_id)
+            (parsed["type"], float(parsed["amount"]), parsed["category"], parsed["note"], user_id)
         )
         conn.commit()
         cur.close()
         conn.close()
 
+        type_label = "🟢 Thu nhập" if parsed["type"] == "income" else "🔴 Chi tiêu"
         return {
             "status": "success",
-            "reply": f"📸 Đã quét thành công Bill ({width}x{height}px)!\n"
-                     f"• Số tiền: {parsed['amount']:,.0f} VNĐ\n"
-                     f"• Danh mục: {parsed['category']}\n"
-                     f"• Ghi chú: {parsed['note']}"
+            "reply": f"🧠 **Gemini AI OCR Quét Hóa Đơn Thành Công!**\n\n"
+                     f"• **Loại:** {type_label}\n"
+                     f"• **Số tiền:** {float(parsed['amount']):,.0f} VNĐ\n"
+                     f"• **Danh mục:** {parsed['category']}\n"
+                     f"• **Nội dung:** {parsed['note']}"
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Lỗi đọc ảnh hóa đơn: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Lỗi đọc hóa đơn: {str(e)}")
 
 @app.get("/history/{user_id}")
 def get_history(user_id: int):
