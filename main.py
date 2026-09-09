@@ -161,3 +161,66 @@ def get_history(user_id: int):
         return {"total": len(rows), "data": rows}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi Database: {str(e)}")
+# --- BỔ SUNG VÀO CUỐI FILE MAIN.PY ---
+
+class BudgetSettingRequest(BaseModel):
+    user_id: int
+    monthly_expense_limit: float
+    monthly_income_target: float
+
+@app.post("/budget-status")
+def budget_status(req: BudgetSettingRequest):
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # Lấy tổng thu nhập và chi tiêu của user_id trong tháng hiện tại
+        cur.execute(
+            """
+            SELECT type, COALESCE(SUM(CAST(amount AS FLOAT)), 0) as total
+            FROM transactions 
+            WHERE user_id = %s
+            GROUP BY type;
+            """,
+            (req.user_id,)
+        )
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        total_income = 0.0
+        total_expense = 0.0
+        for r in rows:
+            if r["type"] == "income":
+                total_income = float(r["total"])
+            elif r["type"] == "expense":
+                total_expense = float(r["total"])
+
+        # Tính toán phần trăm Hạn mức Chi tiêu
+        expense_pct = round((total_expense / req.monthly_expense_limit) * 100, 1) if req.monthly_expense_limit > 0 else 0
+        
+        expense_status = "normal"
+        expense_msg = "Chi tiêu đang nằm trong tầm kiểm soát."
+        if expense_pct >= 100:
+            expense_status = "danger"
+            expense_msg = f"⚠️ VƯỢT BÁO ĐỘNG! Bạn đã chi {total_expense:,.0f} VNĐ ({expense_pct}% hạn mức tháng)!"
+        elif expense_pct >= 80:
+            expense_status = "warning"
+            expense_msg = f"⚡ CẢNH BÁO: Bạn đã chi {total_expense:,.0f} VNĐ ({expense_pct}% hạn mức tháng)!"
+
+        # Tính toán phần trăm Định mức Thu nhập
+        income_pct = round((total_income / req.monthly_income_target) * 100, 1) if req.monthly_income_target > 0 else 0
+        income_msg = f"Bạn đã đạt {income_pct}% mục tiêu thu nhập tháng ({total_income:,.0f} / {req.monthly_income_target:,.0f} VNĐ)."
+
+        return {
+            "total_income": total_income,
+            "total_expense": total_expense,
+            "balance": total_income - total_expense,
+            "expense_pct": expense_pct,
+            "expense_status": expense_status,
+            "expense_msg": expense_msg,
+            "income_pct": income_pct,
+            "income_msg": income_msg
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Lỗi hệ thống: {str(e)}")
