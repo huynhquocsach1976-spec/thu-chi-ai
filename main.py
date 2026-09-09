@@ -8,6 +8,7 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 @app.post("/register")
 @app.post("/login")
+@app.post("/budget-status")
 
 app = FastAPI(title="Thu Chi AI Backend")
 
