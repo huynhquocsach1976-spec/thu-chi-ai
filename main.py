@@ -175,10 +175,10 @@ def budget_status(req: BudgetSettingRequest):
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        # Lấy tổng thu nhập và chi tiêu của user_id trong tháng hiện tại
+        # Truy vấn an toàn lấy tổng thu/chi theo user_id
         cur.execute(
             """
-            SELECT type, COALESCE(SUM(CAST(amount AS FLOAT)), 0) as total
+            SELECT type, SUM(CAST(amount AS FLOAT)) as total
             FROM transactions 
             WHERE user_id = %s
             GROUP BY type;
@@ -191,14 +191,15 @@ def budget_status(req: BudgetSettingRequest):
 
         total_income = 0.0
         total_expense = 0.0
-        for r in rows:
-            if r["type"] == "income":
-                total_income = float(r["total"])
-            elif r["type"] == "expense":
-                total_expense = float(r["total"])
+        if rows:
+            for r in rows:
+                if r["type"] == "income" and r["total"] is not None:
+                    total_income = float(r["total"])
+                elif r["type"] == "expense" and r["total"] is not None:
+                    total_expense = float(r["total"])
 
-        # Tính toán phần trăm Hạn mức Chi tiêu
-        expense_pct = round((total_expense / req.monthly_expense_limit) * 100, 1) if req.monthly_expense_limit > 0 else 0
+        # Tính phần trăm hạn mức chi
+        expense_pct = round((total_expense / req.monthly_expense_limit) * 100, 1) if req.monthly_expense_limit > 0 else 0.0
         
         expense_status = "normal"
         expense_msg = "Chi tiêu đang nằm trong tầm kiểm soát."
@@ -209,8 +210,8 @@ def budget_status(req: BudgetSettingRequest):
             expense_status = "warning"
             expense_msg = f"⚡ CẢNH BÁO: Bạn đã chi {total_expense:,.0f} VNĐ ({expense_pct}% hạn mức tháng)!"
 
-        # Tính toán phần trăm Định mức Thu nhập
-        income_pct = round((total_income / req.monthly_income_target) * 100, 1) if req.monthly_income_target > 0 else 0
+        # Tính phần trăm mục tiêu thu nhập
+        income_pct = round((total_income / req.monthly_income_target) * 100, 1) if req.monthly_income_target > 0 else 0.0
         income_msg = f"Bạn đã đạt {income_pct}% mục tiêu thu nhập tháng ({total_income:,.0f} / {req.monthly_income_target:,.0f} VNĐ)."
 
         return {
