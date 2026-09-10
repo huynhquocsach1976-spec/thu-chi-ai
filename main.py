@@ -1,7 +1,6 @@
 import os
 import re
 import hashlib
-from datetime import datetime
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import psycopg2
@@ -10,7 +9,9 @@ import google.generativeai as genai
 
 app = FastAPI(title="Thu Chi AI Pro Backend")
 
-# 1. Cấu hình biến môi trường
+# ---------------------------------------------------------
+# 1. CẤU HÌNH BIẾN MÔI TRƯỜNG & DATABASE
+# ---------------------------------------------------------
 DATABASE_URL = os.getenv("DATABASE_URL")
 if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
@@ -28,7 +29,7 @@ def get_db_connection():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi kết nối Database Postgres: {str(e)}")
 
-# 2. Khởi tạo bảng khi Server khởi động
+# Khởi tạo bảng khi Server Startup
 @app.on_event("startup")
 def startup_event():
     if not DATABASE_URL:
@@ -69,7 +70,9 @@ def startup_event():
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
 
-# Pydantic Schemas
+# ---------------------------------------------------------
+# 2. SCHEMAS (PYDANTIC)
+# ---------------------------------------------------------
 class AuthRequest(BaseModel):
     username: str
     password: str
@@ -78,7 +81,9 @@ class TransactionRequest(BaseModel):
     user_id: int
     text: str
 
-# Endpoints
+# ---------------------------------------------------------
+# 3. ENDPOINTS CŨ (GIỮ NGUYÊN)
+# ---------------------------------------------------------
 @app.get("/")
 def home():
     return {"status": "ok", "message": "Thu Chi AI Backend đang hoạt động"}
@@ -125,11 +130,14 @@ def login(req: AuthRequest):
         cur.close()
         conn.close()
 
+# ---------------------------------------------------------
+# 4. PHẦN BỔ SUNG MỚI: API XỬ LÝ "com 15k" (KHẮC PHỤC 404 NOT FOUND)
+# ---------------------------------------------------------
 @app.post("/add-transaction-ai")
 def add_transaction_ai(req: TransactionRequest):
     text = req.text.lower().strip()
     
-    # Bóc tách số tiền (xử lý k, m, tr)
+    # Bóc tách số tiền (15k -> 15000, 10m -> 10000000)
     amount = 0.0
     match = re.search(r'(\d+[\.,]?\d*)\s*(k|m|tr|triệu|nghìn|ngan)?', text)
     if match:
@@ -144,19 +152,17 @@ def add_transaction_ai(req: TransactionRequest):
     else:
         raise HTTPException(status_code=400, detail="Không tìm thấy số tiền hợp lệ trong câu nhập!")
 
-    # Phân loại Thu / Chi
+    # Nhận diện Thu / Chi
     tx_type = "chi"
-    if any(kw in text for kw in ["lương", "luong", "thu", "được", "cho", "thưởng", "thu nhập"]):
+    if any(kw in text for kw in ["lương", "luong", "thu", "được", "cho", "thưởng"]):
         tx_type = "thu"
 
-    # Phân loại danh mục đơn giản
+    # Nhận diện danh mục
     category = "Khác"
-    if any(kw in text for kw in ["cơm", "com", "bún", "phở", "cà phê", "ca phe", "ăn", "an", "uống"]):
+    if any(kw in text for kw in ["cơm", "com", "bún", "phở", "cà phê", "ca phe", "ăn", "uống"]):
         category = "Ăn uống"
     elif any(kw in text for kw in ["xăng", "xang", "xe", "grab", "taxi"]):
         category = "Di chuyển"
-    elif any(kw in text for kw in ["tiền nhà", "điện", "nước", "mạng", "wifi"]):
-        category = "Hóa đơn"
 
     conn = get_db_connection()
     cur = conn.cursor()
@@ -169,9 +175,10 @@ def add_transaction_ai(req: TransactionRequest):
         conn.commit()
         return {
             "status": "success",
+            "message": f"Đã ghi nhận giao dịch: {req.text}",
             "data": {
                 "id": tx_id,
-                "type": "Thu nhập" if tx_type == "thu" else "Chi tiêu",
+                "type": tx_type,
                 "amount": amount,
                 "category": category,
                 "note": req.text
@@ -179,7 +186,7 @@ def add_transaction_ai(req: TransactionRequest):
         }
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Lỗi ghi nhận giao dịch: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Lỗi lưu cơ sở dữ liệu: {str(e)}")
     finally:
         cur.close()
         conn.close()
@@ -196,7 +203,7 @@ def get_transactions(user_id: int):
         records = cur.fetchall()
         return {"status": "success", "data": records}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Lỗi tải danh sách giao dịch: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Lỗi lấy dữ liệu giao dịch: {str(e)}")
     finally:
         cur.close()
         conn.close()
