@@ -1,21 +1,23 @@
 import os
 import re
 import hashlib
-import json
 from datetime import datetime
-from fastapi import FastAPI, File, UploadFile, HTTPException, Form
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import psycopg2
 from psycopg2.extras import RealDictCursor
+import google.generativeai as genai
 
-app = FastAPI(title="Thu Chi AI Backend Pro")
+app = FastAPI(title="Thu Chi AI Pro Backend")
 
-# 1. Lấy và chuẩn hóa DATABASE_URL
+# 1. Cấu hình biến môi trường
 DATABASE_URL = os.getenv("DATABASE_URL")
 if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
 
 def get_db_connection():
     if not DATABASE_URL:
@@ -24,9 +26,9 @@ def get_db_connection():
         conn = psycopg2.connect(DATABASE_URL)
         return conn
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Không thể kết nối Database Postgres: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Lỗi kết nối Database Postgres: {str(e)}")
 
-# 2. TỰ ĐỘNG TẠO BẢNG DATABASE KHI SERVER KHỞI CHẠY
+# 2. Khởi tạo bảng khi Server khởi động
 @app.on_event("startup")
 def startup_event():
     if not DATABASE_URL:
@@ -67,22 +69,19 @@ def startup_event():
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
 
+# Pydantic Schemas
 class AuthRequest(BaseModel):
     username: str
     password: str
 
-class ChatMessage(BaseModel):
-    message: str
+class TransactionRequest(BaseModel):
     user_id: int
+    text: str
 
-class BudgetSettingRequest(BaseModel):
-    user_id: int
-    monthly_expense_limit: float
-    monthly_income_target: float
-
+# Endpoints
 @app.get("/")
 def home():
-    return {"status": "ok", "message": "Backend Thu Chi AI đang chạy bình thường"}
+    return {"status": "ok", "message": "Thu Chi AI Backend đang hoạt động"}
 
 @app.post("/register")
 def register(req: AuthRequest):
@@ -121,7 +120,83 @@ def login(req: AuthRequest):
     except HTTPException as e:
         raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Lỗi Server xử lý Đăng nhập: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Lỗi Server Đăng nhập: {str(e)}")
+    finally:
+        cur.close()
+        conn.close()
+
+@app.post("/add-transaction-ai")
+def add_transaction_ai(req: TransactionRequest):
+    text = req.text.lower().strip()
+    
+    # Bóc tách số tiền (xử lý k, m, tr)
+    amount = 0.0
+    match = re.search(r'(\d+[\.,]?\d*)\s*(k|m|tr|triệu|nghìn|ngan)?', text)
+    if match:
+        raw_num = float(match.group(1).replace(',', '.'))
+        unit = match.group(2)
+        if unit in ['k', 'nghìn', 'ngan']:
+            amount = raw_num * 1000
+        elif unit in ['m', 'tr', 'triệu']:
+            amount = raw_num * 1000000
+        else:
+            amount = raw_num if raw_num >= 1000 else raw_num * 1000
+    else:
+        raise HTTPException(status_code=400, detail="Không tìm thấy số tiền hợp lệ trong câu nhập!")
+
+    # Phân loại Thu / Chi
+    tx_type = "chi"
+    if any(kw in text for kw in ["lương", "luong", "thu", "được", "cho", "thưởng", "thu nhập"]):
+        tx_type = "thu"
+
+    # Phân loại danh mục đơn giản
+    category = "Khác"
+    if any(kw in text for kw in ["cơm", "com", "bún", "phở", "cà phê", "ca phe", "ăn", "an", "uống"]):
+        category = "Ăn uống"
+    elif any(kw in text for kw in ["xăng", "xang", "xe", "grab", "taxi"]):
+        category = "Di chuyển"
+    elif any(kw in text for kw in ["tiền nhà", "điện", "nước", "mạng", "wifi"]):
+        category = "Hóa đơn"
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "INSERT INTO transactions (user_id, type, amount, category, note) VALUES (%s, %s, %s, %s, %s) RETURNING id;",
+            (req.user_id, tx_type, amount, category, req.text)
+        )
+        tx_id = cur.fetchone()[0]
+        conn.commit()
+        return {
+            "status": "success",
+            "data": {
+                "id": tx_id,
+                "type": "Thu nhập" if tx_type == "thu" else "Chi tiêu",
+                "amount": amount,
+                "category": category,
+                "note": req.text
+            }
+        }
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Lỗi ghi nhận giao dịch: {str(e)}")
+    finally:
+        cur.close()
+        conn.close()
+
+@app.get("/transactions/{user_id}")
+def get_transactions(user_id: int):
+    conn = get_db_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        cur.execute(
+            "SELECT id, type, amount, category, note, date FROM transactions WHERE user_id = %s ORDER BY date DESC;",
+            (user_id,)
+        )
+        records = cur.fetchall()
+        return {"status": "success", "data": records}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Lỗi tải danh sách giao dịch: {str(e)}")
     finally:
         cur.close()
         conn.close()
