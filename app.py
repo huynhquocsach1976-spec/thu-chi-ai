@@ -2,238 +2,115 @@ import streamlit as st
 import requests
 import pandas as pd
 
+# Cấu hình đường dẫn Backend
 API_URL = "https://thu-chi-ai.onrender.com"
 
-st.set_page_config(page_title="Thu Chi AI Pro", page_icon="📷", layout="wide")
+st.set_page_config(page_title="Thu Chi AI Pro", page_icon="💰", layout="wide")
 
-if "user" not in st.session_state:
-    st.session_state["user"] = None
+# Khởi tạo Session State
+if "user_id" not in st.session_state:
+    st.session_state["user_id"] = None
+if "username" not in st.session_state:
+    st.session_state["username"] = None
+
+st.title("💰 Thu Chi AI Pro - Quản Lý Tài Chính")
 
 # --- MÀN HÌNH ĐĂNG NHẬP / ĐĂNG KÝ ---
-if not st.session_state["user"]:
-    st.title("🔐 Đăng nhập Thu Chi AI Pro")
-    tab_login, tab_reg = st.tabs(["🔑 Đăng nhập", "📝 Đăng ký tài khoản"])
-
-    # --- TAB ĐĂNG NHẬP ---
-    with tab_login:
-        u = st.text_input("Tên đăng nhập", key="login_u")
-        p = st.text_input("Mật khẩu", type="password", key="login_p")
-        if st.button("Đăng nhập", use_container_width=True):
-            if u and p:
+if not st.session_state["user_id"]:
+    tab1, tab2 = st.tabs(["🔒 Đăng nhập", "📝 Đăng ký"])
+    
+    with tab1:
+        st.subheader("Đăng nhập hệ thống")
+        login_user = st.text_input("Tên đăng nhập", key="login_user")
+        login_pwd = st.text_input("Mật khẩu", type="password", key="login_pwd")
+        if st.button("Đăng nhập", type="primary"):
+            if login_user and login_pwd:
                 try:
-                    res = requests.post(f"{API_URL}/login", json={"username": u, "password": p})
+                    res = requests.post(f"{API_URL}/login", json={"username": login_user, "password": login_pwd})
                     if res.status_code == 200:
-                        st.session_state["user"] = res.json()
-                        st.success("Đăng nhập thành công!")
+                        data = res.json()
+                        st.session_state["user_id"] = data["user_id"]
+                        st.session_state["username"] = data["username"]
+                        st.success(f"Chào mừng {data['username']} quay trở lại!")
                         st.rerun()
                     else:
-                        try:
-                            err_msg = res.json().get("detail", "Đăng nhập thất bại")
-                        except Exception:
-                            err_msg = f"Lỗi Server (Mã {res.status_code}). Có thể Backend đang khởi động lại hoặc gặp sự cố kết nối Database."
-                        st.error(err_msg)
+                        st.error(res.json().get("detail", "Đăng nhập thất bại!"))
                 except Exception as e:
-                    st.error(f"Không thể kết nối Server Backend: {e}")
+                    st.error(f"Không thể kết nối đến Server Backend: {e}")
             else:
-                st.warning("Vui lòng điền đủ thông tin!")
+                st.warning("Vui lòng điền đầy đủ thông tin!")
 
-    # --- TAB ĐĂNG KÝ ---
-    with tab_reg:
-        reg_u = st.text_input("Tên đăng nhập mới", key="reg_u")
-        reg_p = st.text_input("Mật khẩu mới", type="password", key="reg_p")
-        if st.button("Tạo tài khoản mới", use_container_width=True):
-            if reg_u and reg_p:
+    with tab2:
+        st.subheader("Tạo tài khoản mới")
+        reg_user = st.text_input("Tên đăng nhập mới", key="reg_user")
+        reg_pwd = st.text_input("Mật khẩu mới", type="password", key="reg_pwd")
+        if st.button("Tạo tài khoản"):
+            if reg_user and reg_pwd:
                 try:
-                    res = requests.post(f"{API_URL}/register", json={"username": reg_u, "password": reg_p})
+                    res = requests.post(f"{API_URL}/register", json={"username": reg_user, "password": reg_pwd})
                     if res.status_code == 200:
-                        st.success("Đăng ký thành công! Hãy chuyển sang tab Đăng nhập.")
+                        st.success("Đăng ký thành công! Hãy chuyển sang Tab Đăng nhập.")
                     else:
-                        try:
-                            err_msg = res.json().get("detail", "Đăng ký thất bại")
-                        except Exception:
-                            err_msg = f"Lỗi Server (Mã {res.status_code})."
-                        st.error(err_msg)
+                        st.error(res.json().get("detail", "Đăng ký thất bại!"))
                 except Exception as e:
-                    st.error(f"Không thể kết nối Server Backend: {e}")
+                    st.error(f"Lỗi kết nối Backend: {e}")
             else:
-                st.warning("Vui lòng điền đủ thông tin!")
+                st.warning("Vui lòng điền đầy đủ thông tin!")
 
-# --- MÀN HÌNH CHÍNH APP ---
+# --- MÀN HÌNH CHÍNH SAU KHU ĐĂNG NHẬP ---
 else:
-    user = st.session_state["user"]
-    
-    st.sidebar.title("👤 Tài khoản Pro")
-    st.sidebar.info(f"Xin chào: **{user['username']}**")
-    if st.sidebar.button("🚪 Đăng xuất", use_container_width=True):
-        st.session_state["user"] = None
+    st.sidebar.write(f"👤 Tài khoản: **{st.session_state['username']}**")
+    if st.sidebar.button("Đăng xuất"):
+        st.session_state["user_id"] = None
+        st.session_state["username"] = None
         st.rerun()
 
-    st.title("💎 Quản Lý Thu Chi AI Pro")
-
-    tab_chat, tab_camera, tab_history, tab_budget = st.tabs([
-        "💬 Nhập Thu Chi", 
-        "📷 Quét Bill Camera",
-        "📜 Lịch sử Giao dịch", 
-        "🎯 Định mức & Cảnh báo Pro"
-    ])
-
-    # --- TAB 1: NHẬP THU CHI ---
-    with tab_chat:
-        st.subheader("Trợ lý AI Nhận diện Thu Chi")
-        st.caption("Ví dụ: `Cơm trưa 35k`, `Xăng xe 50k`, `Lương tháng 15tr`")
-        msg = st.chat_input("Nhập thông tin thu chi...")
-        if msg:
-            st.chat_message("user").write(msg)
+    # Nhập giao dịch bằng AI
+    st.subheader("💬 Nhập thu chi nhanh")
+    user_input = st.text_input("Nhập câu chi tiêu/thu nhập (Ví dụ: `com 15k`, `luong 15m`, `ca phe 35k`):", key="tx_input")
+    
+    if st.button("Lưu giao dịch", type="primary"):
+        if user_input:
             try:
                 res = requests.post(
-                    f"{API_URL}/chat",
-                    json={"message": msg, "user_id": user["user_id"]}
+                    f"{API_URL}/add-transaction-ai",
+                    json={"user_id": st.session_state["user_id"], "text": user_input}
                 )
                 if res.status_code == 200:
-                    st.chat_message("assistant").write(res.json()["reply"])
+                    tx = res.json()["data"]
+                    st.success(f"✅ Đã ghi nhận: **{tx['type']}** - {tx['amount']:,.0f} VNĐ ({tx['category']})")
                 else:
-                    try:
-                        err_msg = res.json().get("detail", "Lỗi xử lý giao dịch!")
-                    except Exception:
-                        err_msg = f"Lỗi Server (Mã {res.status_code})."
-                    st.error(err_msg)
+                    st.error(res.json().get("detail", "Không xử lý được giao dịch!"))
             except Exception as e:
-                st.error(f"Lỗi kết nối: {e}")
-
-    # --- TAB 2: QUÉT BILL BẰNG CAMERA TRỰC TIẾP ---
-    with tab_camera:
-        st.subheader("📸 Quét Hóa Đơn Trực Tiếp Bằng Camera / Tải Ảnh")
-        
-        mode = st.radio("Chọn phương thức nhập ảnh:", ["📷 Chụp trực tiếp từ Camera", "📁 Tải ảnh Bill từ máy"], horizontal=True)
-        
-        img_file = None
-        if "Camera" in mode:
-            img_file = st.camera_input("Chụp ảnh hóa đơn của bạn")
+                st.error(f"Lỗi gửi dữ liệu: {e}")
         else:
-            img_file = st.file_uploader("Chọn ảnh Hóa đơn (PNG, JPG, JPEG)", type=["png", "jpg", "jpeg"])
+            st.warning("Vui lòng nhập thông tin giao dịch!")
 
-        if img_file is not None:
-            st.image(img_file, caption="Ảnh Bill đã chọn", use_container_width=True)
-            if st.button("🚀 Quét & Tự Động Lưu Giao Dịch", type="primary", use_container_width=True):
-                with st.spinner("Đang phân tích hóa đơn bằng AI..."):
-                    try:
-                        files = {"file": (img_file.name, img_file.getvalue(), img_file.type or "image/jpeg")}
-                        data = {"user_id": user["user_id"]}
-                        res = requests.post(f"{API_URL}/scan-bill", data=data, files=files)
-                        
-                        if res.status_code == 200:
-                            st.success(res.json()["reply"])
-                        else:
-                            try:
-                                detail_err = res.json().get("detail", "Lỗi xử lý hình ảnh!")
-                            except Exception:
-                                detail_err = f"Lỗi Server (Mã {res.status_code}). Vui lòng kiểm tra lại cấu hình Backend."
-                            st.error(detail_err)
-                    except Exception as e:
-                        st.error(f"Lỗi kết nối: {e}")
+    st.divider()
 
-    # --- TAB 3: LỊCH SỬ GIAO DỊCH (TIẾNG VIỆT) ---
-    with tab_history:
-        st.subheader("📜 Lịch sử Giao dịch Dạng Bảng")
-        if st.button("🔄 Tải lại lịch sử"):
-            try:
-                res = requests.get(f"{API_URL}/history/{user['user_id']}")
-                if res.status_code == 200:
-                    data = res.json().get("data", [])
-                    if data:
-                        df = pd.DataFrame(data)
-                        
-                        # Việt hóa giá trị Loại giao dịch
-                        type_mapping = {
-                            "income": "🟢 Thu nhập",
-                            "expense": "🔴 Chi tiêu"
-                        }
-                        if "type" in df.columns:
-                            df["type"] = df["type"].map(lambda x: type_mapping.get(x, x))
-                        
-                        # Việt hóa tên các Tiêu đề Cột
-                        column_mapping = {
-                            "id": "Mã GD",
-                            "type": "Loại Giao Dịch",
-                            "amount": "Số Tiền (VNĐ)",
-                            "category": "Danh Mục",
-                            "note": "Ghi Chú",
-                            "date": "Thời Gian"
-                        }
-                        df = df.rename(columns=column_mapping)
-                        
-                        # Định dạng số tiền có dấu phẩy phân cách hàng nghìn
-                        if "Số Tiền (VNĐ)" in df.columns:
-                            df["Số Tiền (VNĐ)"] = df["Số Tiền (VNĐ)"].apply(lambda x: f"{x:,.0f}" if pd.notnull(x) else x)
+    # Danh sách Lịch sử Thu Chi
+    st.subheader("📊 Lịch sử & Thống kê")
+    try:
+        res = requests.get(f"{API_URL}/transactions/{st.session_state['user_id']}")
+        if res.status_code == 200:
+            tx_data = res.json()["data"]
+            if tx_data:
+                df = pd.DataFrame(tx_data)
+                
+                # Tính tổng Thu / Chi / Số dư
+                total_income = df[df['type'] == 'thu']['amount'].sum()
+                total_expense = df[df['type'] == 'chi']['amount'].sum()
+                balance = total_income - total_expense
 
-                        st.dataframe(df, use_container_width=True)
-                    else:
-                        st.info("Chưa có lịch sử giao dịch nào.")
-                else:
-                    st.error(f"Lỗi tải dữ liệu từ Server (Mã {res.status_code})")
-            except Exception as e:
-                st.error(f"Lỗi tải lịch sử: {e}")
+                col1, col2, col3 = st.columns(3)
+                col1.metric("💵 Tổng Thu", f"{total_income:,.0f} VNĐ")
+                col2.metric("💸 Tổng Chi", f"{total_expense:,.0f} VNĐ")
+                col3.metric("💳 Số Dư", f"{balance:,.0f} VNĐ")
 
-    # --- TAB 4: ĐỊNH MỨC & CẢNH BÁO PRO ---
-    with tab_budget:
-        st.subheader("🎯 Cấu hình Hạn mức & Mục tiêu Tài chính")
-        
-        c_exp, c_inc = st.columns(2)
-        with c_exp:
-            exp_limit = st.number_input(
-                "🔴 Hạn mức Chi tiêu Tối đa (VNĐ)", 
-                min_value=100000, 
-                value=10000000, 
-                step=500000
-            )
-        with c_inc:
-            inc_target = st.number_input(
-                "🟢 Mục tiêu Thu nhập Tháng (VNĐ)", 
-                min_value=100000, 
-                value=20000000, 
-                step=1000000
-            )
-
-        if st.button("📊 Phân tích & Phản hồi Cảnh báo Pro", use_container_width=True, type="primary"):
-            try:
-                res = requests.post(
-                    f"{API_URL}/budget-status",
-                    json={
-                        "user_id": user["user_id"],
-                        "monthly_expense_limit": float(exp_limit),
-                        "monthly_income_target": float(inc_target)
-                    }
-                )
-                if res.status_code == 200:
-                    data = res.json()
-                    
-                    st.markdown("---")
-                    st.subheader("📈 Báo cáo Tài chính Tháng")
-                    
-                    m1, m2, m3 = st.columns(3)
-                    m1.metric("Tổng Thu Nhập", f"{data['total_income']:,.0f} VNĐ")
-                    m2.metric("Tổng Chi Tiêu", f"{data['total_expense']:,.0f} VNĐ")
-                    m3.metric("Số Dư Ròng", f"{data['balance']:,.0f} VNĐ")
-
-                    st.markdown("---")
-                    
-                    st.write("### 🔴 Hạn mức Chi tiêu")
-                    if data["expense_status"] == "danger":
-                        st.error(data["expense_msg"])
-                    elif data["expense_status"] == "warning":
-                        st.warning(data["expense_msg"])
-                    else:
-                        st.success(data["expense_msg"])
-                    
-                    st.progress(min(data["expense_pct"] / 100.0, 1.0))
-                    st.caption(f"Đã dùng: **{data['expense_pct']}%** hạn mức cho phép.")
-
-                    st.write("### 🟢 Mục tiêu Thu nhập")
-                    st.info(data["income_msg"])
-                    st.progress(min(data["income_pct"] / 100.0, 1.0))
-                    st.caption(f"Tỷ lệ hoàn thành: **{data['income_pct']}%** mục tiêu.")
-
-                else:
-                    st.error("Không thể lấy dữ liệu phân tích!")
-            except Exception as e:
-                st.error(f"Lỗi kết nối: {e}")
+                st.dataframe(df[['date', 'type', 'amount', 'category', 'note']], use_container_width=True)
+            else:
+                st.info("Chưa có giao dịch nào được lưu.")
+        else:
+            st.error("Không tải được danh sách giao dịch.")
+    except Exception as e:
+        st.error(f"Lỗi tải dữ liệu: {e}")
