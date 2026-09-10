@@ -3,6 +3,7 @@ import requests
 import pandas as pd
 import base64
 
+# Đảm bảo đường dẫn này trỏ chính xác về Render backend của bạn
 API_URL = "https://thu-chi-ai.onrender.com"
 
 st.set_page_config(page_title="Thu Chi AI Pro", page_icon="💰", layout="wide")
@@ -14,7 +15,7 @@ if "username" not in st.session_state:
 
 st.title("💰 Thu Chi AI Pro - Quản Lý Tài Chính")
 
-# --- 1. MÀN HÌNH ĐĂNG NHẬP / ĐĂNG KÝ ---
+# --- ĐĂNG NHẬP / ĐĂNG KÝ ---
 if not st.session_state["user_id"]:
     tab1, tab2 = st.tabs(["🔒 Đăng nhập", "📝 Đăng ký"])
     
@@ -32,7 +33,7 @@ if not st.session_state["user_id"]:
                         st.success("Đăng nhập thành công!")
                         st.rerun()
                     else:
-                        st.error(res.json().get("detail", "Đăng nhập thất bại!"))
+                        st.error(res.json().get("detail", "Sai tên đăng nhập hoặc mật khẩu!"))
                 except Exception as e:
                     st.error(f"Không thể kết nối Backend: {e}")
 
@@ -44,15 +45,15 @@ if not st.session_state["user_id"]:
                 try:
                     res = requests.post(f"{API_URL}/register", json={"username": reg_user, "password": reg_pwd})
                     if res.status_code == 200:
-                        st.success("Tạo tài khoản thành công! Hãy đăng nhập.")
+                        st.success("Đăng ký thành công! Hãy chuyển sang tab Đăng nhập.")
                     else:
                         st.error(res.json().get("detail", "Đăng ký thất bại!"))
                 except Exception as e:
                     st.error(f"Lỗi kết nối Backend: {e}")
 
-# --- 2. MÀN HÌNH CHÍNH QUẢN LÝ ---
+# --- GIAO DIỆN CHÍNH ---
 else:
-    st.sidebar.write(f"👤 Tài khoản: **{st.session_state['username']}**")
+    st.sidebar.write(f"👤 Xin chào: **{st.session_state['username']}**")
     if st.sidebar.button("Đăng xuất"):
         st.session_state["user_id"] = None
         st.session_state["username"] = None
@@ -60,7 +61,7 @@ else:
 
     tab_chat, tab_scan = st.tabs(["💬 Nhập thu chi nhanh", "📷 Quét hóa đơn / Bill AI"])
 
-    # TAB 1: NHẬP BẰNG TEXT
+    # TAB 1: NHẬP VĂN BẢN
     with tab_chat:
         user_input = st.text_input("Nhập nội dung (VD: `com 15k`, `ca phe 30k`, `luong 15m`):", key="tx_input")
         if st.button("Lưu giao dịch", type="primary"):
@@ -71,22 +72,22 @@ else:
                         json={"user_id": st.session_state["user_id"], "text": user_input}
                     )
                     if res.status_code == 200:
-                        st.success(res.json().get("message", "Đã lưu thành công!"))
+                        st.success(res.json().get("message", "Đã ghi nhận!"))
                         st.rerun()
                     else:
                         st.error(f"Lỗi: {res.json().get('detail', res.text)}")
                 except Exception as e:
                     st.error(f"Lỗi kết nối: {e}")
 
-    # TAB 2: QUÉT BILL / HÓA ĐƠN AI
+    # TAB 2: QUÉT BILL / QR
     with tab_scan:
-        st.subheader("Tải lên ảnh Bill / Hóa đơn thanh toán / Mã QR")
-        uploaded_file = st.file_uploader("Chọn ảnh hóa đơn", type=["jpg", "jpeg", "png"])
+        st.subheader("Tải lên ảnh Hóa đơn / Mã QR thanh toán")
+        uploaded_file = st.file_uploader("Chọn tệp hình ảnh", type=["jpg", "jpeg", "png"])
         
         if uploaded_file is not None:
-            st.image(uploaded_file, caption="Ảnh hóa đơn đã tải lên", width=300)
-            if st.button("Phân tích & Tự động lưu bằng AI"):
-                with st.spinner("Gemini AI đang đọc thông tin hóa đơn..."):
+            st.image(uploaded_file, caption="Ảnh hóa đơn đã chọn", width=280)
+            if st.button("Phân tích & Tự động lưu"):
+                with st.spinner("Gemini AI đang trích xuất dữ liệu hóa đơn..."):
                     try:
                         bytes_data = uploaded_file.getvalue()
                         base64_img = base64.b64encode(bytes_data).decode('utf-8')
@@ -100,13 +101,13 @@ else:
                             st.success(f"✅ Đã quét thành công: **{data['note']}** - Số tiền: **{data['amount']:,.0f} VNĐ** ({data['category']})")
                             st.rerun()
                         else:
-                            st.error(f"Lỗi phân tích: {res.json().get('detail', res.text)}")
+                            st.error(f"Lỗi: {res.json().get('detail', res.text)}")
                     except Exception as e:
                         st.error(f"Lỗi xử lý ảnh: {e}")
 
     st.divider()
 
-    # --- THỐNG KÊ VÀ LỊCH SỬ GIAO DỊCH ---
+    # --- BẢNG THỐNG KÊ VÀ LỊCH SỬ GIAO DỊCH ---
     st.subheader("📊 Thống kê & Lịch sử giao dịch")
     try:
         res = requests.get(f"{API_URL}/transactions/{st.session_state['user_id']}")
@@ -126,7 +127,7 @@ else:
 
                 st.dataframe(df[['date', 'type', 'amount', 'category', 'note']], use_container_width=True)
             else:
-                st.info("Chưa có giao dịch nào.")
+                st.info("Chưa có giao dịch nào được lưu.")
         else:
             st.error("Không tải được danh sách giao dịch từ Server.")
     except Exception as e:
