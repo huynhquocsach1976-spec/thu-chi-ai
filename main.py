@@ -82,7 +82,7 @@ class TransactionRequest(BaseModel):
     text: str
 
 # ---------------------------------------------------------
-# 3. ENDPOINTS CŨ (GIỮ NGUYÊN)
+# 3. API ENDPOINTS
 # ---------------------------------------------------------
 @app.get("/")
 def home():
@@ -130,14 +130,11 @@ def login(req: AuthRequest):
         cur.close()
         conn.close()
 
-# ---------------------------------------------------------
-# 4. PHẦN BỔ SUNG MỚI: API XỬ LÝ "com 15k" (KHẮC PHỤC 404 NOT FOUND)
-# ---------------------------------------------------------
 @app.post("/add-transaction-ai")
 def add_transaction_ai(req: TransactionRequest):
     text = req.text.lower().strip()
     
-    # Bóc tách số tiền (15k -> 15000, 10m -> 10000000)
+    # 1. Bóc tách số tiền (xử lý k, m, tr, triệu, nghìn)
     amount = 0.0
     match = re.search(r'(\d+[\.,]?\d*)\s*(k|m|tr|triệu|nghìn|ngan)?', text)
     if match:
@@ -150,19 +147,21 @@ def add_transaction_ai(req: TransactionRequest):
         else:
             amount = raw_num if raw_num >= 1000 else raw_num * 1000
     else:
-        raise HTTPException(status_code=400, detail="Không tìm thấy số tiền hợp lệ trong câu nhập!")
+        raise HTTPException(status_code=400, detail="Không tìm thấy số tiền hợp lệ trong nội dung nhập!")
 
-    # Nhận diện Thu / Chi
+    # 2. Phân loại Thu / Chi
     tx_type = "chi"
-    if any(kw in text for kw in ["lương", "luong", "thu", "được", "cho", "thưởng"]):
+    if any(kw in text for kw in ["lương", "luong", "thu", "được", "cho", "thưởng", "thu nhập"]):
         tx_type = "thu"
 
-    # Nhận diện danh mục
+    # 3. Phân loại Danh mục
     category = "Khác"
-    if any(kw in text for kw in ["cơm", "com", "bún", "phở", "cà phê", "ca phe", "ăn", "uống"]):
+    if any(kw in text for kw in ["cơm", "com", "bún", "phở", "cà phê", "ca phe", "ăn", "uống", "bánh"]):
         category = "Ăn uống"
-    elif any(kw in text for kw in ["xăng", "xang", "xe", "grab", "taxi"]):
+    elif any(kw in text for kw in ["xăng", "xang", "xe", "grab", "taxi", "gửi xe"]):
         category = "Di chuyển"
+    elif any(kw in text for kw in ["tiền nhà", "điện", "nước", "mạng", "wifi"]):
+        category = "Hóa đơn"
 
     conn = get_db_connection()
     cur = conn.cursor()
@@ -178,7 +177,7 @@ def add_transaction_ai(req: TransactionRequest):
             "message": f"Đã ghi nhận giao dịch: {req.text}",
             "data": {
                 "id": tx_id,
-                "type": tx_type,
+                "type": "Thu nhập" if tx_type == "thu" else "Chi tiêu",
                 "amount": amount,
                 "category": category,
                 "note": req.text
