@@ -1,6 +1,8 @@
 import os
 import re
 import hashlib
+import base64
+from datetime import datetime
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import psycopg2
@@ -9,9 +11,7 @@ import google.generativeai as genai
 
 app = FastAPI(title="Thu Chi AI Pro Backend")
 
-# ---------------------------------------------------------
-# 1. CẤU HÌNH BIẾN MÔI TRƯỜNG & DATABASE
-# ---------------------------------------------------------
+# 1. Cấu hình biến môi trường & Database
 DATABASE_URL = os.getenv("DATABASE_URL")
 if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
@@ -29,7 +29,7 @@ def get_db_connection():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi kết nối Database Postgres: {str(e)}")
 
-# Khởi tạo bảng khi Server Startup
+# Khởi tạo bảng tự động
 @app.on_event("startup")
 def startup_event():
     if not DATABASE_URL:
@@ -70,9 +70,7 @@ def startup_event():
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
 
-# ---------------------------------------------------------
-# 2. SCHEMAS (PYDANTIC)
-# ---------------------------------------------------------
+# Pydantic Schemas
 class AuthRequest(BaseModel):
     username: str
     password: str
@@ -81,9 +79,12 @@ class TransactionRequest(BaseModel):
     user_id: int
     text: str
 
-# ---------------------------------------------------------
-# 3. API ENDPOINTS
-# ---------------------------------------------------------
+class BillScanRequest(BaseModel):
+    user_id: int
+    image_base64: str
+
+# --- ENDPOINTS ---
+
 @app.get("/")
 def home():
     return {"status": "ok", "message": "Thu Chi AI Backend đang hoạt động"}
@@ -134,7 +135,6 @@ def login(req: AuthRequest):
 def add_transaction_ai(req: TransactionRequest):
     text = req.text.lower().strip()
     
-    # 1. Bóc tách số tiền (xử lý k, m, tr, triệu, nghìn)
     amount = 0.0
     match = re.search(r'(\d+[\.,]?\d*)\s*(k|m|tr|triệu|nghìn|ngan)?', text)
     if match:
@@ -147,20 +147,18 @@ def add_transaction_ai(req: TransactionRequest):
         else:
             amount = raw_num if raw_num >= 1000 else raw_num * 1000
     else:
-        raise HTTPException(status_code=400, detail="Không tìm thấy số tiền hợp lệ trong nội dung nhập!")
+        raise HTTPException(status_code=400, detail="Không tìm thấy số tiền hợp lệ!")
 
-    # 2. Phân loại Thu / Chi
     tx_type = "chi"
     if any(kw in text for kw in ["lương", "luong", "thu", "được", "cho", "thưởng", "thu nhập"]):
         tx_type = "thu"
 
-    # 3. Phân loại Danh mục
     category = "Khác"
-    if any(kw in text for kw in ["cơm", "com", "bún", "phở", "cà phê", "ca phe", "ăn", "uống", "bánh"]):
+    if any(kw in text for kw in ["cơm", "com", "bún", "phở", "cà phê", "ca phe", "ăn", "uống"]):
         category = "Ăn uống"
-    elif any(kw in text for kw in ["xăng", "xang", "xe", "grab", "taxi", "gửi xe"]):
+    elif any(kw in text for kw in ["xăng", "xang", "xe", "grab", "taxi"]):
         category = "Di chuyển"
-    elif any(kw in text for kw in ["tiền nhà", "điện", "nước", "mạng", "wifi"]):
+    elif any(kw in text for kw in ["tiền nhà", "điện", "nước", "mạng"]):
         category = "Hóa đơn"
 
     conn = get_db_connection()
@@ -174,21 +172,67 @@ def add_transaction_ai(req: TransactionRequest):
         conn.commit()
         return {
             "status": "success",
-            "message": f"Đã ghi nhận giao dịch: {req.text}",
-            "data": {
-                "id": tx_id,
-                "type": "Thu nhập" if tx_type == "thu" else "Chi tiêu",
-                "amount": amount,
-                "category": category,
-                "note": req.text
-            }
+            "message": f"Đã ghi nhận: {req.text}",
+            "data": {"id": tx_id, "type": "Thu nhập" if tx_type == "thu" else "Chi tiêu", "amount": amount, "category": category, "note": req.text}
         }
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Lỗi lưu cơ sở dữ liệu: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Lỗi DB: {str(e)}")
     finally:
         cur.close()
         conn.close()
+
+@app.post("/scan-bill")
+def scan_bill(req: BillScanRequest):
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=500, detail="Chưa cấu hình GEMINI_API_KEY trên Render!")
+    
+    try:
+        image_bytes = base64.b64decode(req.image_base64)
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        prompt = """
+        Hãy phân tích hình ảnh hóa đơn/bill này và trả về kết quả dưới dạng JSON duy nhất có các trường:
+        {
+          "amount": (số tiền tổng thanh toán kiểu số thực),
+          "category": (danh mục phù hợp như "Ăn uống", "Mua sắm", "Di chuyển", "Hóa đơn", "Khác"),
+          "note": (tên cửa hàng/chi tiết hóa đơn)
+        }
+        Chỉ trả về chuỗi JSON thuần, không thêm ký tự markdown hay câu từ nào khác.
+        """
+        
+        response = model.generate_content([
+            prompt,
+            {"mime_type": "image/jpeg", "data": image_bytes}
+        ])
+        
+        # Làm sạch chuỗi phản hồi
+        clean_json = response.text.replace("```json", "").replace("```", "").strip()
+        import json
+        data = json.loads(clean_json)
+        
+        amount = float(data.get("amount", 0))
+        category = data.get("category", "Khác")
+        note = data.get("note", "Chi tiêu qua hóa đơn/QR")
+        
+        # Lưu thẳng vào DB
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO transactions (user_id, type, amount, category, note) VALUES (%s, %s, %s, %s, %s) RETURNING id;",
+            (req.user_id, "chi", amount, category, note)
+        )
+        tx_id = cur.fetchone()[0]
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        return {
+            "status": "success",
+            "data": {"id": tx_id, "amount": amount, "category": category, "note": note}
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Lỗi khi đọc hóa đơn bằng Gemini AI: {str(e)}")
 
 @app.get("/transactions/{user_id}")
 def get_transactions(user_id: int):
