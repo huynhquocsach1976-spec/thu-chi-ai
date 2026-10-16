@@ -1,4 +1,3 @@
-```python
 import streamlit as st
 import requests
 import pandas as pd
@@ -11,8 +10,8 @@ import os
 
 BACKEND_URL = os.getenv(
     "BACKEND_URL",
-    "http://127.0.0.1:8000"
-)
+    "https://THAY-BANG-URL-BACKEND-CUA-ANH"
+).rstrip("/")
 
 st.set_page_config(
     page_title="Thu Chi AI Pro",
@@ -22,7 +21,7 @@ st.set_page_config(
 )
 
 # =========================================================
-# CSS GIAO DIỆN
+# CSS
 # =========================================================
 
 st.markdown("""
@@ -34,16 +33,19 @@ st.markdown("""
 
 .block-container {
     padding-top: 2rem;
+    padding-bottom: 3rem;
 }
 
 .title {
     font-size: 36px;
     font-weight: 700;
+    margin-bottom: 5px;
 }
 
 .subtitle {
     color: #666;
     font-size: 16px;
+    margin-bottom: 25px;
 }
 
 .card {
@@ -54,13 +56,9 @@ st.markdown("""
     margin-bottom: 15px;
 }
 
-.money {
-    font-size: 28px;
-    font-weight: 700;
-}
-
-.small {
-    color: #777;
+.stButton > button {
+    border-radius: 10px;
+    font-weight: 600;
 }
 
 </style>
@@ -68,7 +66,7 @@ st.markdown("""
 
 
 # =========================================================
-# SESSION
+# SESSION STATE
 # =========================================================
 
 if "logged_in" not in st.session_state:
@@ -82,12 +80,13 @@ if "username" not in st.session_state:
 
 
 # =========================================================
-# HÀM GỌI API
+# API POST
 # =========================================================
 
 def api_post(endpoint, data):
 
     try:
+
         response = requests.post(
             f"{BACKEND_URL}{endpoint}",
             json=data,
@@ -96,7 +95,7 @@ def api_post(endpoint, data):
 
         try:
             result = response.json()
-        except:
+        except Exception:
             result = {
                 "detail": response.text
             }
@@ -104,19 +103,36 @@ def api_post(endpoint, data):
         return response.status_code, result
 
     except requests.exceptions.ConnectionError:
+
         return 0, {
-            "detail": "Không thể kết nối Backend FastAPI!"
+            "detail": (
+                "Không thể kết nối Backend FastAPI. "
+                "Hãy kiểm tra BACKEND_URL."
+            )
+        }
+
+    except requests.exceptions.Timeout:
+
+        return 0, {
+            "detail": "Backend phản hồi quá lâu."
+
         }
 
     except Exception as e:
+
         return 0, {
             "detail": str(e)
         }
 
 
+# =========================================================
+# API GET
+# =========================================================
+
 def api_get(endpoint):
 
     try:
+
         response = requests.get(
             f"{BACKEND_URL}{endpoint}",
             timeout=60
@@ -124,7 +140,7 @@ def api_get(endpoint):
 
         try:
             result = response.json()
-        except:
+        except Exception:
             result = {
                 "detail": response.text
             }
@@ -132,14 +148,47 @@ def api_get(endpoint):
         return response.status_code, result
 
     except requests.exceptions.ConnectionError:
+
         return 0, {
-            "detail": "Không thể kết nối Backend FastAPI!"
+            "detail": (
+                "Không thể kết nối Backend FastAPI. "
+                "Hãy kiểm tra BACKEND_URL."
+            )
+        }
+
+    except requests.exceptions.Timeout:
+
+        return 0, {
+            "detail": "Backend phản hồi quá lâu."
         }
 
     except Exception as e:
+
         return 0, {
             "detail": str(e)
         }
+
+
+# =========================================================
+# KIỂM TRA BACKEND
+# =========================================================
+
+def check_backend():
+
+    try:
+
+        response = requests.get(
+            f"{BACKEND_URL}/",
+            timeout=15
+        )
+
+        if response.status_code == 200:
+            return True
+
+        return False
+
+    except Exception:
+        return False
 
 
 # =========================================================
@@ -154,23 +203,49 @@ def login_page():
     )
 
     st.markdown(
-        '<div class="subtitle">Quản lý tài chính cá nhân bằng AI</div>',
+        '<div class="subtitle">'
+        'Quản lý tài chính cá nhân bằng AI'
+        '</div>',
         unsafe_allow_html=True
     )
+
+    # -----------------------------------------------------
+    # KIỂM TRA BACKEND
+    # -----------------------------------------------------
+
+    if check_backend():
+
+        st.success(
+            "🟢 Backend đang hoạt động"
+        )
+
+    else:
+
+        st.error(
+            "🔴 Không kết nối được Backend"
+        )
+
+        st.info(
+            "Kiểm tra lại biến BACKEND_URL trong "
+            "Streamlit Cloud → Settings → Secrets."
+        )
 
     st.write("")
 
     tab_login, tab_register = st.tabs(
-        ["🔐 Đăng nhập", "📝 Đăng ký"]
+        [
+            "🔐 Đăng nhập",
+            "📝 Đăng ký"
+        ]
     )
 
-    # -----------------------------------------------------
+    # =====================================================
     # LOGIN
-    # -----------------------------------------------------
+    # =====================================================
 
     with tab_login:
 
-        st.subheader("Đăng nhập")
+        st.subheader("🔐 Đăng nhập")
 
         username = st.text_input(
             "Tên đăng nhập",
@@ -207,10 +282,19 @@ def login_page():
                 if status == 200:
 
                     st.session_state.logged_in = True
-                    st.session_state.user_id = result["user_id"]
-                    st.session_state.username = result["username"]
 
-                    st.success("Đăng nhập thành công!")
+                    st.session_state.user_id = result.get(
+                        "user_id"
+                    )
+
+                    st.session_state.username = result.get(
+                        "username",
+                        username
+                    )
+
+                    st.success(
+                        "Đăng nhập thành công!"
+                    )
 
                     st.rerun()
 
@@ -223,13 +307,13 @@ def login_page():
                         )
                     )
 
-    # -----------------------------------------------------
+    # =====================================================
     # REGISTER
-    # -----------------------------------------------------
+    # =====================================================
 
     with tab_register:
 
-        st.subheader("Tạo tài khoản")
+        st.subheader("📝 Tạo tài khoản")
 
         new_username = st.text_input(
             "Tên đăng nhập",
@@ -249,7 +333,7 @@ def login_page():
         )
 
         if st.button(
-            "📝 Đăng ký",
+            "📝 Đăng ký tài khoản",
             use_container_width=True
         ):
 
@@ -257,6 +341,12 @@ def login_page():
 
                 st.warning(
                     "Vui lòng nhập đầy đủ thông tin."
+                )
+
+            elif len(new_password) < 6:
+
+                st.warning(
+                    "Mật khẩu phải có ít nhất 6 ký tự."
                 )
 
             elif new_password != confirm_password:
@@ -279,7 +369,7 @@ def login_page():
 
                     st.success(
                         "Đăng ký thành công! "
-                        "Bây giờ anh có thể đăng nhập."
+                        "Anh có thể đăng nhập ngay."
                     )
 
                 else:
@@ -341,13 +431,20 @@ def sidebar():
 
 def get_transactions():
 
+    if not st.session_state.user_id:
+
+        return []
+
     status, result = api_get(
         f"/transactions/{st.session_state.user_id}"
     )
 
     if status == 200:
 
-        return result.get("data", [])
+        return result.get(
+            "data",
+            []
+        )
 
     st.error(
         result.get(
@@ -370,26 +467,40 @@ def dashboard():
         unsafe_allow_html=True
     )
 
-    st.write(
-        f"Xin chào **{st.session_state.username}** 👋"
+    st.markdown(
+        f'<div class="subtitle">'
+        f'Xin chào <b>{st.session_state.username}</b> 👋'
+        f'</div>',
+        unsafe_allow_html=True
     )
 
     transactions = get_transactions()
 
-    total_income = 0
-    total_expense = 0
+    total_income = 0.0
+    total_expense = 0.0
 
     for tx in transactions:
 
-        amount = float(tx.get("amount", 0))
+        amount = float(
+            tx.get(
+                "amount",
+                0
+            )
+        )
 
         if tx.get("type") == "thu":
+
             total_income += amount
 
         else:
+
             total_expense += amount
 
     balance = total_income - total_expense
+
+    # -----------------------------------------------------
+    # THỐNG KÊ
+    # -----------------------------------------------------
 
     col1, col2, col3 = st.columns(3)
 
@@ -414,13 +525,15 @@ def dashboard():
             f"{balance:,.0f} đ"
         )
 
-    st.write("")
+    st.divider()
 
     # -----------------------------------------------------
     # NHẬP NHANH
     # -----------------------------------------------------
 
-    st.subheader("🤖 Nhập giao dịch nhanh")
+    st.subheader(
+        "🤖 Nhập giao dịch nhanh"
+    )
 
     quick_text = st.text_input(
         "Ví dụ: Ăn cơm 50k, đổ xăng 100k, nhận lương 15 triệu",
@@ -450,7 +563,10 @@ def dashboard():
 
             if status == 200:
 
-                data = result.get("data", {})
+                data = result.get(
+                    "data",
+                    {}
+                )
 
                 st.success(
                     f"Đã ghi nhận "
@@ -469,11 +585,15 @@ def dashboard():
                     )
                 )
 
+    st.divider()
+
     # -----------------------------------------------------
     # GIAO DỊCH GẦN ĐÂY
     # -----------------------------------------------------
 
-    st.subheader("📋 Giao dịch gần đây")
+    st.subheader(
+        "📋 Giao dịch gần đây"
+    )
 
     if transactions:
 
@@ -481,23 +601,26 @@ def dashboard():
 
         for tx in recent:
 
-            amount = float(tx.get("amount", 0))
-
-            icon = (
-                "🟢"
-                if tx.get("type") == "thu"
-                else "🔴"
+            amount = float(
+                tx.get(
+                    "amount",
+                    0
+                )
             )
 
-            sign = (
-                "+"
-                if tx.get("type") == "thu"
-                else "-"
-            )
+            if tx.get("type") == "thu":
+
+                icon = "🟢"
+                sign = "+"
+
+            else:
+
+                icon = "🔴"
+                sign = "-"
 
             st.write(
-                f"{icon} **{tx.get('category', 'Khác')}**  "
-                f"{sign}{amount:,.0f} đ  —  "
+                f"{icon} **{tx.get('category', 'Khác')}** "
+                f"{sign}{amount:,.0f} đ — "
                 f"{tx.get('note', '')}"
             )
 
@@ -520,7 +643,7 @@ def add_transaction():
     )
 
     st.write(
-        "Anh có thể nhập bằng câu nói tự nhiên."
+        "Nhập giao dịch bằng câu tiếng Việt tự nhiên."
     )
 
     text = st.text_area(
@@ -557,7 +680,10 @@ def add_transaction():
 
         if status == 200:
 
-            data = result.get("data", {})
+            data = result.get(
+                "data",
+                {}
+            )
 
             st.success(
                 "Giao dịch đã được lưu!"
@@ -566,21 +692,30 @@ def add_transaction():
             col1, col2, col3 = st.columns(3)
 
             with col1:
+
                 st.metric(
-                    "Số tiền",
+                    "💰 Số tiền",
                     f"{data.get('amount', 0):,.0f} đ"
                 )
 
             with col2:
+
                 st.metric(
-                    "Loại",
-                    data.get("type", "")
+                    "📌 Loại",
+                    data.get(
+                        "type",
+                        ""
+                    )
                 )
 
             with col3:
+
                 st.metric(
-                    "Danh mục",
-                    data.get("category", "")
+                    "📂 Danh mục",
+                    data.get(
+                        "category",
+                        ""
+                    )
                 )
 
         else:
@@ -610,7 +745,12 @@ def scan_bill():
 
     uploaded_file = st.file_uploader(
         "Chọn ảnh hóa đơn",
-        type=["jpg", "jpeg", "png", "webp"]
+        type=[
+            "jpg",
+            "jpeg",
+            "png",
+            "webp"
+        ]
     )
 
     if uploaded_file:
@@ -632,7 +772,9 @@ def scan_bill():
 
                 image_base64 = base64.b64encode(
                     image_bytes
-                ).decode("utf-8")
+                ).decode(
+                    "utf-8"
+                )
 
                 status, result = api_post(
                     "/scan-bill",
@@ -705,7 +847,9 @@ def history():
 
         return
 
-    df = pd.DataFrame(transactions)
+    df = pd.DataFrame(
+        transactions
+    )
 
     if "amount" in df.columns:
 
@@ -758,7 +902,9 @@ def statistics():
 
         return
 
-    df = pd.DataFrame(transactions)
+    df = pd.DataFrame(
+        transactions
+    )
 
     df["amount"] = pd.to_numeric(
         df["amount"],
@@ -766,12 +912,16 @@ def statistics():
     )
 
     # -----------------------------------------------------
-    # THU / CHI
+    # THU
     # -----------------------------------------------------
 
     income = df[
         df["type"] == "thu"
     ]["amount"].sum()
+
+    # -----------------------------------------------------
+    # CHI
+    # -----------------------------------------------------
 
     expense = df[
         df["type"] == "chi"
@@ -809,7 +959,9 @@ def statistics():
             expense_df
             .groupby("category")["amount"]
             .sum()
-            .sort_values(ascending=False)
+            .sort_values(
+                ascending=False
+            )
         )
 
         st.subheader(
@@ -821,13 +973,19 @@ def statistics():
         )
 
     # -----------------------------------------------------
-    # THU / CHI
+    # BIỂU ĐỒ THU CHI
     # -----------------------------------------------------
 
     chart_data = pd.DataFrame(
         {
-            "Loại": ["Thu", "Chi"],
-            "Số tiền": [income, expense]
+            "Loại": [
+                "Thu",
+                "Chi"
+            ],
+            "Số tiền": [
+                income,
+                expense
+            ]
         }
     )
 
@@ -836,7 +994,9 @@ def statistics():
     )
 
     st.bar_chart(
-        chart_data.set_index("Loại")
+        chart_data.set_index(
+            "Loại"
+        )
     )
 
 
@@ -871,4 +1031,3 @@ else:
     elif menu == "📊 Thống kê":
 
         statistics()
-```
