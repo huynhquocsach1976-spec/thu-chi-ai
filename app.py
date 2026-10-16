@@ -21,8 +21,71 @@ BACKEND_URL = raw_backend_url.rstrip("/")
 st.set_page_config(
     page_title="Thu Chi AI Pro",
     page_icon="💰",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
+
+
+# =========================================================
+# CUSTOM CSS (GIAO DIỆN ĐĂNG NHẬP NHỎ GỌN, BACKGROUND ĐẸP)
+# =========================================================
+
+CUSTOM_CSS = """
+<style>
+/* Background toàn trang phong cách Gradient hiện đại */
+.stApp {
+    background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
+    color: #f8fafc;
+}
+
+/* Card Đăng nhập / Đăng ký căn giữa & thu nhỏ gọn */
+[data-testid="stForm"] {
+    background: rgba(30, 41, 59, 0.7) !important;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 16px !important;
+    padding: 24px 28px !important;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Căn chỉnh lại Tab Đăng nhập / Đăng ký */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 8px;
+    background-color: rgba(15, 23, 42, 0.6);
+    padding: 6px;
+    border-radius: 12px;
+}
+
+.stTabs [data-baseweb="tab"] {
+    border-radius: 8px;
+    padding: 8px 16px;
+    color: #94a3b8;
+}
+
+.stTabs [aria-selected="true"] {
+    background-color: #6366f1 !important;
+    color: #ffffff !important;
+}
+
+/* Nút bấm nổi bật hơn */
+.stButton > button {
+    border-radius: 10px !important;
+    background: linear-gradient(90deg, #6366f1 0%, #4f46e5 100%) !important;
+    color: white !important;
+    font-weight: 600 !important;
+    border: none !important;
+    transition: all 0.3s ease !important;
+}
+
+.stButton > button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.4);
+}
+</style>
+"""
+
+st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 
 # =========================================================
@@ -166,77 +229,83 @@ def show_result(result, title_amount="💰 Số tiền"):
 
 
 # =========================================================
-# LOGIN / REGISTER PAGE
+# LOGIN / REGISTER PAGE (GIAO DIỆN THU NHỎ CĂN GIỮA)
 # =========================================================
 
 if not st.session_state.logged_in:
 
-    st.title("💰 Thu Chi AI Pro")
-    st.write("Quản lý thu chi thông minh bằng AI")
-    st.divider()
+    # Căn giữa khung đăng nhập bằng 3 cột Streamlit
+    col_left, col_center, col_right = st.columns([1, 1.8, 1])
 
-    login_tab, register_tab = st.tabs(["🔐 Đăng nhập", "📝 Đăng ký"])
+    with col_center:
+        st.markdown(
+            """
+            <div style="text-align: center; margin-top: 20px; margin-bottom: 20px;">
+                <h1 style="font-size: 2.2rem; margin-bottom: 0px;">💰 Thu Chi AI Pro</h1>
+                <p style="color: #94a3b8; font-size: 0.95rem;">Quản lý tài chính cá nhân thông minh bằng AI</p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
-    # ---------------- LOGIN ----------------
-    with login_tab:
-        st.subheader("🔐 Đăng nhập")
+        login_tab, register_tab = st.tabs(["🔐 Đăng nhập", "📝 Đăng ký"])
 
-        with st.form("login_form"):
-            username = st.text_input("Tên đăng nhập")
-            password = st.text_input("Mật khẩu", type="password")
-            submitted = st.form_submit_button("🔐 Đăng nhập", use_container_width=True)
+        # ---------------- LOGIN ----------------
+        with login_tab:
+            with st.form("login_form"):
+                username = st.text_input("Tên đăng nhập", placeholder="Nhập tên đăng nhập")
+                password = st.text_input("Mật khẩu", type="password", placeholder="Nhập mật khẩu")
+                submitted = st.form_submit_button("🔐 Đăng nhập", use_container_width=True)
 
-        if submitted:
-            if not username.strip():
-                st.warning("Vui lòng nhập tên đăng nhập.")
-            elif not password:
-                st.warning("Vui lòng nhập mật khẩu.")
-            else:
-                with st.spinner("Đang đăng nhập..."):
-                    success, result = login_user(username.strip(), password)
+            if submitted:
+                if not username.strip():
+                    st.warning("Vui lòng nhập tên đăng nhập.")
+                elif not password:
+                    st.warning("Vui lòng nhập mật khẩu.")
+                else:
+                    with st.spinner("Đang xác thực..."):
+                        success, result = login_user(username.strip(), password)
 
-                if success:
-                    user_id = result.get("user_id")
-                    if not user_id:
-                        st.error("Backend không trả về user_id.")
+                    if success:
+                        user_id = result.get("user_id")
+                        if not user_id:
+                            st.error("Backend không trả về user_id.")
+                        else:
+                            st.session_state.logged_in = True
+                            st.session_state.user_id = user_id
+                            st.session_state.username = result.get("username", username.strip())
+                            st.rerun()
                     else:
-                        st.session_state.logged_in = True
-                        st.session_state.user_id = user_id
-                        st.session_state.username = result.get("username", username.strip())
-                        st.rerun()
+                        st.error("❌ " + str(result))
+
+        # ---------------- REGISTER ----------------
+        with register_tab:
+            with st.form("register_form"):
+                new_username = st.text_input("Tên đăng nhập", placeholder="Ít nhất 3 ký tự")
+                new_password = st.text_input("Mật khẩu", type="password", placeholder="Ít nhất 4 ký tự")
+                confirm_password = st.text_input("Nhập lại mật khẩu", type="password", placeholder="Xác nhận mật khẩu")
+                submitted = st.form_submit_button("📝 Đăng ký tài khoản", use_container_width=True)
+
+            if submitted:
+                username_clean = new_username.strip()
+                if not username_clean:
+                    st.warning("Vui lòng nhập tên đăng nhập.")
+                elif len(username_clean) < 3:
+                    st.warning("Tên đăng nhập phải có ít nhất 3 ký tự.")
+                elif not new_password.strip():
+                    st.warning("Vui lòng nhập mật khẩu.")
+                elif len(new_password.strip()) < 4:
+                    st.warning("Mật khẩu phải có ít nhất 4 ký tự.")
+                elif new_password != confirm_password:
+                    st.error("❌ Hai mật khẩu không giống nhau.")
                 else:
-                    st.error("❌ " + str(result))
+                    with st.spinner("Đang tạo tài khoản..."):
+                        success, result = register_user(username_clean, new_password)
 
-    # ---------------- REGISTER ----------------
-    with register_tab:
-        st.subheader("📝 Đăng ký tài khoản")
-
-        with st.form("register_form"):
-            new_username = st.text_input("Tên đăng nhập")
-            new_password = st.text_input("Mật khẩu", type="password")
-            confirm_password = st.text_input("Nhập lại mật khẩu", type="password")
-            submitted = st.form_submit_button("📝 Đăng ký", use_container_width=True)
-
-        if submitted:
-            username_clean = new_username.strip()
-            if not username_clean:
-                st.warning("Vui lòng nhập tên đăng nhập.")
-            elif len(username_clean) < 3:
-                st.warning("Tên đăng nhập phải có ít nhất 3 ký tự.")
-            elif not new_password.strip():
-                st.warning("Vui lòng nhập mật khẩu.")
-            elif len(new_password.strip()) < 4:
-                st.warning("Mật khẩu phải có ít nhất 4 ký tự.")
-            elif new_password != confirm_password:
-                st.error("❌ Hai mật khẩu không giống nhau.")
-            else:
-                with st.spinner("Đang tạo tài khoản..."):
-                    success, result = register_user(username_clean, new_password)
-
-                if success:
-                    st.success("✅ Đăng ký thành công! Hãy chuyển sang tab Đăng nhập.")
-                else:
-                    st.error("❌ " + str(result))
+                    if success:
+                        st.success("✅ Đăng ký thành công! Bạn hãy chuyển sang tab Đăng nhập.")
+                    else:
+                        st.error("❌ " + str(result))
 
     st.stop()
 
