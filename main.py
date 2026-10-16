@@ -116,6 +116,34 @@ def create_tables():
         ):
             cur.execute(f"ALTER TABLE transactions {ddl};")
 
+        # Gỡ NOT NULL ở các cột cũ không còn dùng (ví dụ cột "type")
+        known_columns = {
+            "users": {"id", "username", "password_hash", "created_at"},
+            "transactions": {
+                "id", "user_id", "transaction_type", "amount",
+                "description", "category", "created_at",
+            },
+        }
+        for table, keep in known_columns.items():
+            cur.execute(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                  AND table_name = %s
+                  AND is_nullable = 'NO'
+                  AND column_default IS NULL
+                """,
+                (table,),
+            )
+            for row in cur.fetchall():
+                col = row["column_name"]
+                if col not in keep:
+                    print(f"MIGRATION: bỏ NOT NULL cột {table}.{col}")
+                    cur.execute(
+                        f'ALTER TABLE {table} ALTER COLUMN "{col}" DROP NOT NULL;'
+                    )
+
         cur.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_transactions_user
