@@ -49,7 +49,7 @@ CUSTOM_CSS = """
     box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05) !important;
 }
 
-/* Căn chỉnh lại Tab Đăng nhập / Đăng ký */
+/* Căn chỉnh lại Tab Đăng nhập / Đăng ký / Giới thiệu */
 .stTabs [data-baseweb="tab-list"] {
     gap: 8px;
     background-color: rgba(226, 232, 240, 0.6);
@@ -236,25 +236,26 @@ def show_result(result, title_amount="💰 Số tiền"):
 
 
 # =========================================================
-# LOGIN / REGISTER PAGE (GIAO DIỆN THU NHỎ CĂN GIỮA - SÁNG SỦA)
+# LOGIN / REGISTER / README PAGE (CĂN GIỮA - SÁNG SỦA)
 # =========================================================
 
 if not st.session_state.logged_in:
 
-    col_left, col_center, col_right = st.columns([1, 1.8, 1])
+    # Mở rộng bố cục một chút ở màn hình chào mừng để hiển thị README thoải mái hơn
+    col_left, col_center, col_right = st.columns([0.5, 3, 0.5])
 
     with col_center:
         st.markdown(
             """
-            <div style="text-align: center; margin-top: 20px; margin-bottom: 20px;">
+            <div style="text-align: center; margin-top: 15px; margin-bottom: 15px;">
                 <h1 style="font-size: 2.2rem; margin-bottom: 0px; color: #1e293b;">💰 Thu Chi AI Pro</h1>
-                <p style="color: #64748b; font-size: 0.95rem;">Quản lý tài chính cá nhân thông minh bằng AI</p>
+                <p style="color: #64748b; font-size: 0.95rem;">Quản lý tài chính cá nhân thông minh bằng trí tuệ nhân tạo</p>
             </div>
             """,
             unsafe_allow_html=True
         )
 
-        login_tab, register_tab = st.tabs(["🔐 Đăng nhập", "📝 Đăng ký"])
+        login_tab, register_tab, readme_tab = st.tabs(["🔐 Đăng nhập", "📝 Đăng ký", "📖 Giới thiệu (README)"])
 
         # ---------------- LOGIN ----------------
         with login_tab:
@@ -312,6 +313,20 @@ if not st.session_state.logged_in:
                         st.success("✅ Đăng ký thành công! Bạn hãy chuyển sang tab Đăng nhập.")
                     else:
                         st.error("❌ " + str(result))
+
+        # ---------------- README / GIỚI THIỆU ----------------
+        with readme_tab:
+            st.markdown("### 📚 Tài liệu giới thiệu sản phẩm")
+            if os.path.exists("README.md"):
+                try:
+                    with open("README.md", "r", encoding="utf-8") as f:
+                        readme_content = f.read()
+                    # Hiển thị nội dung README dưới dạng Markdown trực quan
+                    st.markdown(readme_content)
+                except Exception as e:
+                    st.error(f"Không thể đọc file README.md: {e}")
+            else:
+                st.info("Hiện tại chưa tìm thấy file `README.md` trong thư mục dự án. Hãy đảm bảo bạn đã tạo file này.")
 
     st.stop()
 
