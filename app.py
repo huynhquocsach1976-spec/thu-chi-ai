@@ -1,10 +1,11 @@
+```python
 import os
 import requests
 import streamlit as st
 
 
 # =========================================================
-# CẤU HÌNH
+# CONFIG
 # =========================================================
 
 BACKEND_URL = os.getenv(
@@ -35,36 +36,44 @@ if "username" not in st.session_state:
 
 
 # =========================================================
-# HÀM XỬ LÝ LỖI
+# ERROR
 # =========================================================
 
 def get_error(response):
 
     try:
+
         data = response.json()
 
-        error = data.get(
+        detail = data.get(
             "detail",
             "Có lỗi xảy ra"
         )
 
-        if isinstance(error, list):
+        if isinstance(detail, list):
+
             messages = []
 
-            for item in error:
+            for item in detail:
+
                 if isinstance(item, dict):
+
                     messages.append(
                         item.get(
                             "msg",
                             str(item)
                         )
                     )
+
                 else:
-                    messages.append(str(item))
+
+                    messages.append(
+                        str(item)
+                    )
 
             return "; ".join(messages)
 
-        return str(error)
+        return str(detail)
 
     except Exception:
 
@@ -75,7 +84,7 @@ def get_error(response):
 
 
 # =========================================================
-# KIỂM TRA BACKEND
+# BACKEND CHECK
 # =========================================================
 
 def check_backend():
@@ -95,10 +104,13 @@ def check_backend():
 
 
 # =========================================================
-# ĐĂNG KÝ
+# REGISTER
 # =========================================================
 
-def register_user(username, password):
+def register_user(
+    username,
+    password
+):
 
     try:
 
@@ -112,17 +124,24 @@ def register_user(username, password):
         )
 
         if response.status_code != 200:
-            return False, get_error(response)
+
+            return False, get_error(
+                response
+            )
 
         return True, response.json()
 
     except requests.exceptions.Timeout:
 
-        return False, "Backend phản hồi quá lâu."
+        return False, (
+            "Backend phản hồi quá lâu."
+        )
 
     except requests.exceptions.ConnectionError:
 
-        return False, "Không kết nối được Backend."
+        return False, (
+            "Không kết nối được Backend."
+        )
 
     except Exception as e:
 
@@ -130,10 +149,13 @@ def register_user(username, password):
 
 
 # =========================================================
-# ĐĂNG NHẬP
+# LOGIN
 # =========================================================
 
-def login_user(username, password):
+def login_user(
+    username,
+    password
+):
 
     try:
 
@@ -147,17 +169,26 @@ def login_user(username, password):
         )
 
         if response.status_code != 200:
-            return False, get_error(response)
 
-        return True, response.json()
+            return False, get_error(
+                response
+            )
+
+        data = response.json()
+
+        return True, data
 
     except requests.exceptions.Timeout:
 
-        return False, "Backend phản hồi quá lâu."
+        return False, (
+            "Backend phản hồi quá lâu."
+        )
 
     except requests.exceptions.ConnectionError:
 
-        return False, "Không kết nối được Backend."
+        return False, (
+            "Không kết nối được Backend."
+        )
 
     except Exception as e:
 
@@ -165,7 +196,7 @@ def login_user(username, password):
 
 
 # =========================================================
-# THÊM GIAO DỊCH BẰNG AI
+# AI TRANSACTION
 # =========================================================
 
 def add_transaction_ai(text):
@@ -182,17 +213,24 @@ def add_transaction_ai(text):
         )
 
         if response.status_code != 200:
-            return False, get_error(response)
+
+            return False, get_error(
+                response
+            )
 
         return True, response.json()
 
     except requests.exceptions.Timeout:
 
-        return False, "AI xử lý quá lâu. Vui lòng thử lại."
+        return False, (
+            "AI xử lý quá lâu. Vui lòng thử lại."
+        )
 
     except requests.exceptions.ConnectionError:
 
-        return False, "Không kết nối được Backend."
+        return False, (
+            "Không kết nối được Backend."
+        )
 
     except Exception as e:
 
@@ -200,7 +238,7 @@ def add_transaction_ai(text):
 
 
 # =========================================================
-# LẤY DANH SÁCH GIAO DỊCH
+# GET TRANSACTIONS
 # =========================================================
 
 def get_transactions():
@@ -214,17 +252,33 @@ def get_transactions():
         )
 
         if response.status_code != 200:
-            return False, get_error(response)
 
-        return True, response.json()
+            return False, get_error(
+                response
+            )
+
+        data = response.json()
+
+        if not isinstance(data, list):
+
+            return False, (
+                "Backend trả về dữ liệu "
+                "giao dịch không hợp lệ."
+            )
+
+        return True, data
 
     except requests.exceptions.Timeout:
 
-        return False, "Backend phản hồi quá lâu."
+        return False, (
+            "Backend phản hồi quá lâu."
+        )
 
     except requests.exceptions.ConnectionError:
 
-        return False, "Không kết nối được Backend."
+        return False, (
+            "Không kết nối được Backend."
+        )
 
     except Exception as e:
 
@@ -232,7 +286,7 @@ def get_transactions():
 
 
 # =========================================================
-# QUÉT HÓA ĐƠN
+# SCAN BILL
 # =========================================================
 
 def scan_bill(uploaded_file):
@@ -242,13 +296,17 @@ def scan_bill(uploaded_file):
         file_bytes = uploaded_file.getvalue()
 
         if not file_bytes:
-            return False, "File ảnh rỗng."
+
+            return False, (
+                "File ảnh rỗng."
+            )
 
         files = {
             "file": (
                 uploaded_file.name,
                 file_bytes,
-                uploaded_file.type or "image/jpeg"
+                uploaded_file.type
+                or "image/jpeg"
             )
         }
 
@@ -262,17 +320,24 @@ def scan_bill(uploaded_file):
         )
 
         if response.status_code != 200:
-            return False, get_error(response)
+
+            return False, get_error(
+                response
+            )
 
         return True, response.json()
 
     except requests.exceptions.Timeout:
 
-        return False, "Quét hóa đơn quá lâu. Vui lòng thử lại."
+        return False, (
+            "Quét hóa đơn quá lâu."
+        )
 
     except requests.exceptions.ConnectionError:
 
-        return False, "Không kết nối được Backend."
+        return False, (
+            "Không kết nối được Backend."
+        )
 
     except Exception as e:
 
@@ -280,7 +345,7 @@ def scan_bill(uploaded_file):
 
 
 # =========================================================
-# TRANG ĐĂNG NHẬP
+# LOGIN / REGISTER PAGE
 # =========================================================
 
 if not st.session_state.logged_in:
@@ -301,12 +366,14 @@ if not st.session_state.logged_in:
     )
 
     # =====================================================
-    # ĐĂNG NHẬP
+    # LOGIN
     # =====================================================
 
     with login_tab:
 
-        st.subheader("Đăng nhập")
+        st.subheader(
+            "🔐 Đăng nhập"
+        )
 
         username = st.text_input(
             "Tên đăng nhập",
@@ -349,21 +416,42 @@ if not st.session_state.logged_in:
 
                 if success:
 
-                    st.session_state.logged_in = True
+                    # Backend mới trả:
+                    # user_id
+                    # username
 
-                    st.session_state.user_id = (
-                        result["user_id"]
+                    user_id = result.get(
+                        "user_id"
                     )
 
-                    st.session_state.username = (
-                        result["username"]
+                    logged_username = result.get(
+                        "username",
+                        username.strip()
                     )
 
-                    st.success(
-                        "Đăng nhập thành công!"
-                    )
+                    if not user_id:
 
-                    st.rerun()
+                        st.error(
+                            "Backend không trả về user_id."
+                        )
+
+                    else:
+
+                        st.session_state.logged_in = True
+
+                        st.session_state.user_id = (
+                            user_id
+                        )
+
+                        st.session_state.username = (
+                            logged_username
+                        )
+
+                        st.success(
+                            "✅ Đăng nhập thành công!"
+                        )
+
+                        st.rerun()
 
                 else:
 
@@ -372,12 +460,14 @@ if not st.session_state.logged_in:
                     )
 
     # =====================================================
-    # ĐĂNG KÝ
+    # REGISTER
     # =====================================================
 
     with register_tab:
 
-        st.subheader("Đăng ký tài khoản")
+        st.subheader(
+            "📝 Đăng ký tài khoản"
+        )
 
         new_username = st.text_input(
             "Tên đăng nhập",
@@ -401,13 +491,17 @@ if not st.session_state.logged_in:
             use_container_width=True
         ):
 
-            if not new_username.strip():
+            username_clean = (
+                new_username.strip()
+            )
+
+            if not username_clean:
 
                 st.warning(
                     "Vui lòng nhập tên đăng nhập."
                 )
 
-            elif len(new_username.strip()) < 3:
+            elif len(username_clean) < 3:
 
                 st.warning(
                     "Tên đăng nhập phải có ít nhất 3 ký tự."
@@ -438,7 +532,7 @@ if not st.session_state.logged_in:
                 ):
 
                     success, result = register_user(
-                        new_username.strip(),
+                        username_clean,
                         new_password
                     )
 
@@ -449,7 +543,8 @@ if not st.session_state.logged_in:
                     )
 
                     st.info(
-                        "Bây giờ anh chuyển sang tab Đăng nhập."
+                        "Anh chuyển sang tab Đăng nhập "
+                        "và đăng nhập bằng tài khoản vừa tạo."
                     )
 
                 else:
@@ -467,7 +562,9 @@ if not st.session_state.logged_in:
 
 with st.sidebar:
 
-    st.title("💰 Thu Chi AI Pro")
+    st.title(
+        "💰 Thu Chi AI Pro"
+    )
 
     st.write(
         f"👤 **{st.session_state.username}**"
@@ -475,9 +572,7 @@ with st.sidebar:
 
     st.divider()
 
-    backend_ok = check_backend()
-
-    if backend_ok:
+    if check_backend():
 
         st.success(
             "🟢 Backend Online"
@@ -504,10 +599,12 @@ with st.sidebar:
 
 
 # =========================================================
-# TRANG CHÍNH
+# MAIN
 # =========================================================
 
-st.title("💰 Thu Chi AI Pro")
+st.title(
+    "💰 Thu Chi AI Pro"
+)
 
 st.write(
     f"Xin chào **{st.session_state.username}** 👋"
@@ -519,7 +616,7 @@ st.caption(
 
 
 # =========================================================
-# CÁC TAB
+# TABS
 # =========================================================
 
 tab_ai, tab_bill, tab_history = st.tabs(
@@ -532,7 +629,7 @@ tab_ai, tab_bill, tab_history = st.tabs(
 
 
 # =========================================================
-# TAB AI
+# AI TRANSACTION
 # =========================================================
 
 with tab_ai:
@@ -567,8 +664,10 @@ with tab_ai:
                 "🤖 AI đang phân tích..."
             ):
 
-                success, result = add_transaction_ai(
-                    transaction_text.strip()
+                success, result = (
+                    add_transaction_ai(
+                        transaction_text.strip()
+                    )
                 )
 
             if success:
@@ -586,17 +685,17 @@ with tab_ai:
 
                 transaction_type = result.get(
                     "transaction_type",
-                    "expense"
-                )
-
-                description = result.get(
-                    "description",
-                    ""
+                    "Chi"
                 )
 
                 category = result.get(
                     "category",
                     "Khác"
+                )
+
+                description = result.get(
+                    "description",
+                    transaction_text
                 )
 
                 col1, col2, col3 = st.columns(3)
@@ -610,7 +709,7 @@ with tab_ai:
 
                 with col2:
 
-                    if transaction_type == "income":
+                    if transaction_type == "Thu":
 
                         st.metric(
                             "📈 Loại",
@@ -639,13 +738,12 @@ with tab_ai:
             else:
 
                 st.error(
-                    "❌ Lỗi xử lý giao dịch AI: "
-                    + str(result)
+                    "❌ " + str(result)
                 )
 
 
 # =========================================================
-# TAB QUÉT HÓA ĐƠN
+# BILL
 # =========================================================
 
 with tab_bill:
@@ -704,10 +802,10 @@ with tab_bill:
                 )
 
                 st.write(
-                    "**Mô tả:**",
+                    "**Loại:**",
                     result.get(
-                        "description",
-                        ""
+                        "transaction_type",
+                        "Chi"
                     )
                 )
 
@@ -719,16 +817,23 @@ with tab_bill:
                     )
                 )
 
+                st.write(
+                    "**Mô tả:**",
+                    result.get(
+                        "description",
+                        ""
+                    )
+                )
+
             else:
 
                 st.error(
-                    "❌ Lỗi xử lý ảnh: "
-                    + str(result)
+                    "❌ " + str(result)
                 )
 
 
 # =========================================================
-# TAB LỊCH SỬ
+# HISTORY
 # =========================================================
 
 with tab_history:
@@ -744,7 +849,9 @@ with tab_history:
 
         st.rerun()
 
-    success, transactions = get_transactions()
+    success, transactions = (
+        get_transactions()
+    )
 
     if not success:
 
@@ -752,7 +859,16 @@ with tab_history:
             "❌ " + str(transactions)
         )
 
-    elif not transactions:
+    elif not isinstance(
+        transactions,
+        list
+    ):
+
+        st.error(
+            "❌ Dữ liệu giao dịch không hợp lệ."
+        )
+
+    elif len(transactions) == 0:
 
         st.info(
             "Chưa có giao dịch nào."
@@ -763,7 +879,19 @@ with tab_history:
         total_income = 0
         total_expense = 0
 
+        valid_transactions = []
+
         for item in transactions:
+
+            if not isinstance(
+                item,
+                dict
+            ):
+                continue
+
+            valid_transactions.append(
+                item
+            )
 
             amount = float(
                 item.get(
@@ -774,10 +902,10 @@ with tab_history:
 
             transaction_type = item.get(
                 "transaction_type",
-                "expense"
+                "Chi"
             )
 
-            if transaction_type == "income":
+            if transaction_type == "Thu":
 
                 total_income += amount
 
@@ -815,7 +943,7 @@ with tab_history:
 
         st.divider()
 
-        for item in transactions:
+        for item in valid_transactions:
 
             amount = float(
                 item.get(
@@ -826,7 +954,7 @@ with tab_history:
 
             transaction_type = item.get(
                 "transaction_type",
-                "expense"
+                "Chi"
             )
 
             description = item.get(
@@ -844,7 +972,7 @@ with tab_history:
                 ""
             )
 
-            if transaction_type == "income":
+            if transaction_type == "Thu":
 
                 icon = "🟢"
                 type_text = "THU"
@@ -883,3 +1011,4 @@ with tab_history:
                     )
 
                 st.divider()
+```
