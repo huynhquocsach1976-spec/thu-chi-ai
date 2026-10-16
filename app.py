@@ -1,8 +1,12 @@
 import os
-import base64
 import requests
 import pandas as pd
 import streamlit as st
+
+
+# =========================================================
+# CẤU HÌNH
+# =========================================================
 
 st.set_page_config(
     page_title="Thu Chi AI Pro",
@@ -16,9 +20,9 @@ BACKEND_URL = os.getenv(
 ).rstrip("/")
 
 
-# =========================
-# SESSION
-# =========================
+# =========================================================
+# SESSION STATE
+# =========================================================
 
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -33,365 +37,122 @@ if "page" not in st.session_state:
     st.session_state.page = "Dashboard"
 
 
-# =========================
-# API
-# =========================
+# =========================================================
+# HÀM GỌI API
+# =========================================================
 
-def api_get(endpoint, timeout=30):
+def api_post(endpoint, data=None, files=None):
+
     try:
-        response = requests.get(
-            f"{BACKEND_URL}{endpoint}",
-            timeout=timeout
-        )
 
-        try:
-            data = response.json()
-        except Exception:
-            data = {"detail": response.text}
+        url = BACKEND_URL + endpoint
 
-        if response.status_code >= 400:
-            return None, data.get(
-                "detail",
-                f"HTTP {response.status_code}"
-            )
-
-        return data, None
-
-    except requests.exceptions.Timeout:
-        return None, "Backend phản hồi quá lâu."
-
-    except requests.exceptions.ConnectionError:
-        return None, f"Không kết nối được Backend: {BACKEND_URL}"
-
-    except Exception as e:
-        return None, str(e)
-
-
-def api_post(endpoint, data, timeout=30):
-    try:
         response = requests.post(
-            f"{BACKEND_URL}{endpoint}",
+            url,
             json=data,
-            timeout=timeout
+            files=files,
+            timeout=120
         )
 
         try:
             result = response.json()
         except Exception:
-            result = {"detail": response.text}
+            result = response.text
 
-        if response.status_code >= 400:
-            return None, result.get(
-                "detail",
-                f"HTTP {response.status_code}"
-            )
+        if response.ok:
+            return result, None
 
-        return result, None
+        # Lấy detail của FastAPI
+        if isinstance(result, dict):
+            error = result.get("detail")
+
+            if error:
+                if isinstance(error, list):
+                    error = "; ".join(
+                        str(x)
+                        for x in error
+                    )
+
+                return None, str(error)
+
+        return None, str(result)
 
     except requests.exceptions.Timeout:
-        return None, "Backend phản hồi quá lâu."
+        return None, "Backend phản hồi quá lâu. Vui lòng thử lại."
 
     except requests.exceptions.ConnectionError:
-        return None, f"Không kết nối được Backend: {BACKEND_URL}"
+        return None, "Không kết nối được Backend."
 
     except Exception as e:
         return None, str(e)
 
 
-def check_backend():
+def api_get(endpoint):
+
     try:
+
+        url = BACKEND_URL + endpoint
+
         response = requests.get(
-            f"{BACKEND_URL}/",
-            timeout=15
+            url,
+            timeout=120
         )
 
-        if response.status_code == 200:
-            return True, response.json()
+        try:
+            result = response.json()
+        except Exception:
+            result = response.text
 
-        return False, f"HTTP {response.status_code}"
+        if response.ok:
+            return result, None
+
+        if isinstance(result, dict):
+
+            error = result.get("detail")
+
+            if error:
+
+                if isinstance(error, list):
+                    error = "; ".join(
+                        str(x)
+                        for x in error
+                    )
+
+                return None, str(error)
+
+        return None, str(result)
+
+    except requests.exceptions.Timeout:
+        return None, "Backend phản hồi quá lâu."
+
+    except requests.exceptions.ConnectionError:
+        return None, "Không kết nối được Backend."
 
     except Exception as e:
-        return False, str(e)
+        return None, str(e)
 
 
-# =========================
-# LOGIN
-# =========================
+# =========================================================
+# HÀM FORMAT TIỀN
+# =========================================================
 
-def login_page():
+def format_money(value):
 
-    st.title("💰 Thu Chi AI Pro")
+    try:
+        value = float(value)
 
-    st.write(
-        "Quản lý thu chi thông minh bằng AI"
-    )
-
-    backend_ok, backend_data = check_backend()
-
-    if backend_ok:
-        st.success(
-            "🟢 Backend đang hoạt động"
-        )
-    else:
-        st.error(
-            "🔴 Không kết nối được Backend"
+        return f"{value:,.0f} ₫".replace(
+            ",",
+            "."
         )
 
-        st.code(
-            BACKEND_URL
-        )
+    except Exception:
+        return "0 ₫"
 
-        st.caption(
-            str(backend_data)
-        )
 
-    st.divider()
-
-    login_tab, register_tab = st.tabs(
-        [
-            "🔐 Đăng nhập",
-            "📝 Đăng ký"
-        ]
-    )
-
-    # =====================
-    # LOGIN
-    # =====================
-
-    with login_tab:
-
-        username = st.text_input(
-            "Tên đăng nhập",
-            key="login_username"
-        )
-
-        password = st.text_input(
-            "Mật khẩu",
-            type="password",
-            key="login_password"
-        )
-
-        if st.button(
-            "🔐 Đăng nhập",
-            type="primary",
-            use_container_width=True
-        ):
-
-            if not username or not password:
-                st.warning(
-                    "Vui lòng nhập tên đăng nhập và mật khẩu."
-                )
-                return
-
-            with st.spinner(
-                "Đang đăng nhập..."
-            ):
-
-                result, error = api_post(
-                    "/login",
-                    {
-                        "username": username,
-                        "password": password
-                    }
-                )
-
-            if error:
-
-                st.error(
-                    "❌ " + error
-                )
-
-            elif result:
-
-                if result.get("status") == "success":
-
-                    st.session_state.logged_in = True
-
-                    st.session_state.user_id = (
-                        result.get("user_id")
-                    )
-
-                    st.session_state.username = (
-                        result.get(
-                            "username",
-                            username
-                        )
-                    )
-
-                    st.session_state.page = "Dashboard"
-
-                    st.success(
-                        "✅ Đăng nhập thành công!"
-                    )
-
-                    st.rerun()
-
-                else:
-
-                    st.error(
-                        result.get(
-                            "message",
-                            "Đăng nhập thất bại."
-                        )
-                    )
-
-    # =====================
-    # REGISTER
-    # =====================
-
-    with register_tab:
-
-        new_username = st.text_input(
-            "Tên đăng nhập mới",
-            key="register_username"
-        )
-
-        new_password = st.text_input(
-            "Mật khẩu",
-            type="password",
-            key="register_password"
-        )
-
-        confirm_password = st.text_input(
-            "Nhập lại mật khẩu",
-            type="password",
-            key="register_confirm"
-        )
-
-        if st.button(
-            "📝 Tạo tài khoản",
-            use_container_width=True
-        ):
-
-            if not new_username or not new_password:
-
-                st.warning(
-                    "Vui lòng nhập đầy đủ thông tin."
-                )
-
-                return
-
-            if new_password != confirm_password:
-
-                st.error(
-                    "❌ Hai mật khẩu không giống nhau."
-                )
-
-                return
-
-            with st.spinner(
-                "Đang tạo tài khoản..."
-            ):
-
-                result, error = api_post(
-                    "/register",
-                    {
-                        "username": new_username,
-                        "password": new_password
-                    }
-                )
-
-            if error:
-
-                st.error(
-                    "❌ " + error
-                )
-
-            elif result:
-
-                if result.get("status") == "success":
-
-                    st.success(
-                        "✅ Đăng ký thành công!"
-                    )
-
-                else:
-
-                    st.error(
-                        result.get(
-                            "message",
-                            "Đăng ký thất bại."
-                        )
-                    )
-
-
-# =========================
-# SIDEBAR
-# =========================
-
-def sidebar():
-
-    with st.sidebar:
-
-        st.title("💰 Thu Chi AI")
-
-        st.write(
-            f"Xin chào **{st.session_state.username}**"
-        )
-
-        st.divider()
-
-        if st.button(
-            "🏠 Dashboard",
-            use_container_width=True
-        ):
-            st.session_state.page = "Dashboard"
-            st.rerun()
-
-        if st.button(
-            "➕ Thêm giao dịch",
-            use_container_width=True
-        ):
-            st.session_state.page = "Add"
-            st.rerun()
-
-        if st.button(
-            "📷 Quét hóa đơn",
-            use_container_width=True
-        ):
-            st.session_state.page = "Scan"
-            st.rerun()
-
-        if st.button(
-            "📋 Lịch sử",
-            use_container_width=True
-        ):
-            st.session_state.page = "History"
-            st.rerun()
-
-        if st.button(
-            "📊 Thống kê",
-            use_container_width=True
-        ):
-            st.session_state.page = "Statistics"
-            st.rerun()
-
-        st.divider()
-
-        backend_ok, _ = check_backend()
-
-        if backend_ok:
-            st.success("🟢 Backend Online")
-        else:
-            st.error("🔴 Backend Offline")
-
-        st.divider()
-
-        if st.button(
-            "🚪 Đăng xuất",
-            use_container_width=True
-        ):
-
-            st.session_state.logged_in = False
-            st.session_state.user_id = None
-            st.session_state.username = ""
-
-            st.rerun()
-
-
-# =========================
-# GET TRANSACTIONS
-# =========================
+# =========================================================
+# LẤY DATA GIAO DỊCH
+# =========================================================
 
 def get_transactions():
 
@@ -405,20 +166,234 @@ def get_transactions():
     )
 
     if error:
-        st.error("❌ " + error)
+        st.error(error)
         return []
 
-    if result:
-        return result.get("data", [])
+    if not isinstance(result, dict):
+        return []
+
+    data = result.get("data", [])
+
+    if isinstance(data, list):
+        return data
 
     return []
 
 
-# =========================
-# DASHBOARD
-# =========================
+# =========================================================
+# ĐĂNG NHẬP / ĐĂNG KÝ
+# =========================================================
 
-def dashboard():
+def login_page():
+
+    st.title("💰 Thu Chi AI Pro")
+
+    st.subheader("🔐 Đăng nhập")
+
+    username = st.text_input(
+        "Tên đăng nhập",
+        key="login_username"
+    )
+
+    password = st.text_input(
+        "Mật khẩu",
+        type="password",
+        key="login_password"
+    )
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+
+        if st.button(
+            "🔐 Đăng nhập",
+            use_container_width=True
+        ):
+
+            if not username or not password:
+
+                st.warning(
+                    "Vui lòng nhập đầy đủ thông tin."
+                )
+
+            else:
+
+                result, error = api_post(
+                    "/login",
+                    {
+                        "username": username,
+                        "password": password
+                    }
+                )
+
+                if error:
+
+                    st.error(error)
+
+                else:
+
+                    st.session_state.logged_in = True
+
+                    st.session_state.user_id = result.get(
+                        "user_id"
+                    )
+
+                    st.session_state.username = result.get(
+                        "username",
+                        username
+                    )
+
+                    st.session_state.page = "Dashboard"
+
+                    st.success(
+                        "Đăng nhập thành công!"
+                    )
+
+                    st.rerun()
+
+    with col2:
+
+        if st.button(
+            "📝 Đăng ký",
+            use_container_width=True
+        ):
+            st.session_state.page = "Đăng ký"
+            st.rerun()
+
+
+def register_page():
+
+    st.title("📝 Đăng ký tài khoản")
+
+    username = st.text_input(
+        "Tên đăng nhập",
+        key="register_username"
+    )
+
+    password = st.text_input(
+        "Mật khẩu",
+        type="password",
+        key="register_password"
+    )
+
+    password2 = st.text_input(
+        "Nhập lại mật khẩu",
+        type="password",
+        key="register_password2"
+    )
+
+    if st.button(
+        "📝 Tạo tài khoản",
+        use_container_width=True
+    ):
+
+        if not username or not password:
+
+            st.warning(
+                "Vui lòng nhập đầy đủ thông tin."
+            )
+
+        elif password != password2:
+
+            st.error(
+                "Mật khẩu nhập lại không giống nhau."
+            )
+
+        else:
+
+            result, error = api_post(
+                "/register",
+                {
+                    "username": username,
+                    "password": password
+                }
+            )
+
+            if error:
+
+                st.error(error)
+
+            else:
+
+                st.success(
+                    "Đăng ký thành công! Hãy đăng nhập."
+                )
+
+                st.session_state.page = "Đăng nhập"
+
+                st.rerun()
+
+    if st.button("⬅️ Quay lại đăng nhập"):
+
+        st.session_state.page = "Đăng nhập"
+
+        st.rerun()
+
+
+# =========================================================
+# SIDEBAR
+# =========================================================
+
+def sidebar():
+
+    with st.sidebar:
+
+        st.title("💰 Thu Chi AI Pro")
+
+        st.write(
+            f"Xin chào **{st.session_state.username}** 👋"
+        )
+
+        st.divider()
+
+        if st.button(
+            "🏠 Dashboard",
+            use_container_width=True
+        ):
+            st.session_state.page = "Dashboard"
+            st.rerun()
+
+        if st.button(
+            "🤖 Nhập giao dịch AI",
+            use_container_width=True
+        ):
+            st.session_state.page = "AI"
+            st.rerun()
+
+        if st.button(
+            "📷 Quét hóa đơn",
+            use_container_width=True
+        ):
+            st.session_state.page = "Scan"
+            st.rerun()
+
+        if st.button(
+            "📋 Lịch sử giao dịch",
+            use_container_width=True
+        ):
+            st.session_state.page = "History"
+            st.rerun()
+
+        st.divider()
+
+        if st.button(
+            "🚪 Đăng xuất",
+            use_container_width=True
+        ):
+
+            st.session_state.logged_in = False
+            st.session_state.user_id = None
+            st.session_state.username = ""
+            st.session_state.page = "Đăng nhập"
+
+            st.rerun()
+
+
+# =========================================================
+# DASHBOARD
+# =========================================================
+
+def dashboard_page():
 
     st.title("🏠 Dashboard")
 
@@ -451,7 +426,7 @@ def dashboard():
         with col3:
             st.metric(
                 "📋 Giao dịch",
-                "0"
+                0
             )
 
         return
@@ -460,47 +435,54 @@ def dashboard():
         transactions
     )
 
+    if "transaction_type" not in df.columns:
+        df["transaction_type"] = "chi"
+
+    if "amount" not in df.columns:
+        df["amount"] = 0
+
     df["amount"] = pd.to_numeric(
         df["amount"],
         errors="coerce"
     ).fillna(0)
 
     total_income = df.loc[
-        df["type"] == "thu",
+        df["transaction_type"] == "thu",
         "amount"
     ].sum()
 
     total_expense = df.loc[
-        df["type"] == "chi",
+        df["transaction_type"] == "chi",
         "amount"
     ].sum()
 
-    balance = (
-        total_income -
-        total_expense
-    )
+    balance = total_income - total_expense
 
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
+
         st.metric(
             "💰 Tổng thu",
-            f"{total_income:,.0f} ₫"
+            format_money(total_income)
         )
 
     with col2:
+
         st.metric(
             "💸 Tổng chi",
-            f"{total_expense:,.0f} ₫"
+            format_money(total_expense)
         )
 
     with col3:
+
         st.metric(
             "💵 Số dư",
-            f"{balance:,.0f} ₫"
+            format_money(balance)
         )
 
     with col4:
+
         st.metric(
             "📋 Giao dịch",
             len(df)
@@ -509,165 +491,228 @@ def dashboard():
     st.divider()
 
     st.subheader(
+        "📊 Thống kê thu chi"
+    )
+
+    chart_data = pd.DataFrame(
+        {
+            "Loại": [
+                "Thu",
+                "Chi"
+            ],
+            "Số tiền": [
+                total_income,
+                total_expense
+            ]
+        }
+    )
+
+    st.bar_chart(
+        chart_data.set_index("Loại")
+    )
+
+    st.subheader(
         "📋 Giao dịch gần đây"
     )
 
-    show_columns = [
-        "type",
-        "amount",
-        "category",
-        "note",
-        "date"
-    ]
+    display_transactions(
+        transactions[:10]
+    )
 
-    columns = [
-        c for c in show_columns
-        if c in df.columns
-    ]
 
-    show_df = df[columns].copy()
+# =========================================================
+# HIỂN THỊ GIAO DỊCH
+# =========================================================
 
-    if "type" in show_df.columns:
+def display_transactions(transactions):
 
-        show_df["type"] = (
-            show_df["type"]
-            .map(
-                {
-                    "thu": "🟢 Thu",
-                    "chi": "🔴 Chi"
-                }
-            )
-            .fillna(
-                show_df["type"]
-            )
+    if not transactions:
+
+        st.info(
+            "Chưa có giao dịch nào."
         )
 
-    if "amount" in show_df.columns:
+        return
 
-        show_df["amount"] = (
-            show_df["amount"]
-            .apply(
-                lambda x:
-                f"{x:,.0f} ₫"
-            )
+    rows = []
+
+    for item in transactions:
+
+        transaction_type = item.get(
+            "transaction_type",
+            ""
         )
+
+        if transaction_type == "thu":
+            type_display = "💰 Thu"
+        else:
+            type_display = "💸 Chi"
+
+        rows.append(
+            {
+                "Loại": type_display,
+                "Số tiền": format_money(
+                    item.get("amount", 0)
+                ),
+                "Nội dung": item.get(
+                    "description",
+                    ""
+                ),
+                "Danh mục": item.get(
+                    "category",
+                    ""
+                ),
+                "Ngày": item.get(
+                    "transaction_date",
+                    ""
+                )
+            }
+        )
+
+    df = pd.DataFrame(rows)
 
     st.dataframe(
-        show_df,
+        df,
         use_container_width=True,
         hide_index=True
     )
 
 
-# =========================
-# ADD TRANSACTION
-# =========================
+# =========================================================
+# NHẬP GIAO DỊCH BẰNG AI
+# =========================================================
 
-def add_transaction():
+def ai_transaction_page():
 
-    st.title(
-        "➕ Thêm giao dịch"
+    st.title("🤖 Nhập giao dịch bằng AI")
+
+    st.write(
+        "Bạn chỉ cần nhập câu tự nhiên, AI sẽ tự phân tích."
     )
 
     st.info(
-        "Ví dụ: Ăn cơm 50k | Đổ xăng 100k | Nhận lương 10 triệu"
+        "Ví dụ: Ăn cơm 50 nghìn"
     )
 
-    text = st.text_input(
-        "💬 Nội dung giao dịch",
-        placeholder="Ví dụ: Ăn cơm 50k"
+    st.info(
+        "Ví dụ: Mua xăng 100 nghìn"
+    )
+
+    st.info(
+        "Ví dụ: Nhận lương 15 triệu"
+    )
+
+    text = st.text_area(
+        "Nội dung giao dịch",
+        placeholder="Ví dụ: Ăn cơm 50 nghìn"
     )
 
     if st.button(
-        "🤖 AI ghi nhận",
-        type="primary",
+        "🤖 Phân tích và lưu",
         use_container_width=True
     ):
 
         if not text.strip():
 
             st.warning(
-                "Vui lòng nhập giao dịch."
+                "Vui lòng nhập nội dung giao dịch."
             )
 
             return
 
         with st.spinner(
-            "🤖 AI đang phân tích..."
+            "AI đang phân tích..."
         ):
 
             result, error = api_post(
                 "/add-transaction-ai",
                 {
-                    "user_id":
-                        st.session_state.user_id,
-                    "text":
-                        text
+                    "user_id": st.session_state.user_id,
+                    "text": text
                 }
             )
 
         if error:
 
             st.error(
-                "❌ " + error
+                "❌ Lỗi xử lý giao dịch AI: "
+                + str(error)
             )
 
-            return
+        else:
 
-        if result:
+            st.success(
+                "✅ Đã thêm giao dịch thành công!"
+            )
 
             data = result.get(
                 "data",
                 {}
             )
 
-            st.success(
-                "✅ Đã ghi nhận giao dịch!"
-            )
+            if isinstance(data, dict):
 
-            col1, col2, col3 = st.columns(3)
+                col1, col2 = st.columns(2)
 
-            with col1:
-                st.metric(
-                    "💰 Số tiền",
-                    f"{float(data.get('amount', 0)):,.0f} ₫"
-                )
+                with col1:
 
-            with col2:
-                st.metric(
-                    "📂 Danh mục",
-                    data.get(
-                        "category",
-                        "Khác"
+                    st.write(
+                        "**Loại:** "
+                        + str(
+                            data.get(
+                                "transaction_type",
+                                ""
+                            )
+                        )
                     )
-                )
 
-            with col3:
-                st.metric(
-                    "📌 Loại",
-                    data.get(
-                        "type",
-                        ""
+                    st.write(
+                        "**Số tiền:** "
+                        + format_money(
+                            data.get(
+                                "amount",
+                                0
+                            )
+                        )
                     )
-                )
+
+                with col2:
+
+                    st.write(
+                        "**Nội dung:** "
+                        + str(
+                            data.get(
+                                "description",
+                                ""
+                            )
+                        )
+                    )
+
+                    st.write(
+                        "**Danh mục:** "
+                        + str(
+                            data.get(
+                                "category",
+                                ""
+                            )
+                        )
+                    )
 
 
-# =========================
-# SCAN BILL
-# =========================
+# =========================================================
+# QUÉT HÓA ĐƠN
+# =========================================================
 
-def scan_bill():
+def scan_bill_page():
 
-    st.title(
-        "📷 Quét hóa đơn bằng AI"
-    )
+    st.title("📷 Quét hóa đơn bằng AI")
 
     st.write(
-        "Tải ảnh hóa đơn để AI phân tích."
+        "Tải ảnh hóa đơn lên, AI sẽ đọc thông tin và lưu giao dịch."
     )
 
     uploaded_file = st.file_uploader(
-        "📷 Chọn ảnh hóa đơn",
+        "Chọn ảnh hóa đơn",
         type=[
             "jpg",
             "jpeg",
@@ -676,346 +721,260 @@ def scan_bill():
         ]
     )
 
-    if uploaded_file:
+    if uploaded_file is not None:
 
         st.image(
             uploaded_file,
-            caption="Hóa đơn",
+            caption="Hóa đơn đã chọn",
             use_container_width=True
         )
 
         if st.button(
-            "🤖 Phân tích hóa đơn",
-            type="primary",
+            "🔍 Quét hóa đơn",
             use_container_width=True
         ):
 
-            try:
+            with st.spinner(
+                "AI đang đọc hóa đơn..."
+            ):
 
-                image_bytes = (
-                    uploaded_file.read()
-                )
+                try:
 
-                image_base64 = (
-                    base64.b64encode(
-                        image_bytes
-                    )
-                    .decode("utf-8")
-                )
+                    # Quan trọng:
+                    # Đưa file về bytes trước khi gửi.
+                    file_bytes = uploaded_file.getvalue()
 
-                with st.spinner(
-                    "🤖 AI đang đọc hóa đơn..."
-                ):
+                    files = {
+                        "file": (
+                            uploaded_file.name,
+                            file_bytes,
+                            uploaded_file.type
+                            or "image/jpeg"
+                        )
+                    }
 
-                    result, error = api_post(
-                        "/scan-bill",
-                        {
-                            "user_id":
-                                st.session_state.user_id,
-                            "image_base64":
-                                image_base64
+                    url = BACKEND_URL + "/scan-bill"
+
+                    response = requests.post(
+                        url,
+                        params={
+                            "user_id": st.session_state.user_id
                         },
-                        timeout=60
+                        files=files,
+                        timeout=180
                     )
 
-                if error:
+                    try:
+                        result = response.json()
+                    except Exception:
+                        result = {
+                            "detail": response.text
+                        }
+
+                    if not response.ok:
+
+                        error = result.get(
+                            "detail",
+                            "Không xác định được lỗi."
+                        )
+
+                        # FIX lỗi list + string
+                        if isinstance(error, list):
+
+                            error = "; ".join(
+                                str(x)
+                                for x in error
+                            )
+
+                        st.error(
+                            "❌ Lỗi xử lý ảnh: "
+                            + str(error)
+                        )
+
+                    else:
+
+                        st.success(
+                            "✅ Đã quét hóa đơn thành công!"
+                        )
+
+                        data = result.get(
+                            "data",
+                            {}
+                        )
+
+                        # Đảm bảo data luôn là dictionary
+                        if not isinstance(
+                            data,
+                            dict
+                        ):
+                            data = {}
+
+                        col1, col2 = st.columns(2)
+
+                        with col1:
+
+                            st.write(
+                                "### 📄 Thông tin hóa đơn"
+                            )
+
+                            st.write(
+                                "**Cửa hàng:** "
+                                + str(
+                                    data.get(
+                                        "merchant",
+                                        ""
+                                    )
+                                )
+                            )
+
+                            st.write(
+                                "**Ngày:** "
+                                + str(
+                                    data.get(
+                                        "date",
+                                        ""
+                                    )
+                                )
+                            )
+
+                            st.write(
+                                "**Danh mục:** "
+                                + str(
+                                    data.get(
+                                        "category",
+                                        "Khác"
+                                    )
+                                )
+                            )
+
+                        with col2:
+
+                            st.write(
+                                "### 💰 Giao dịch"
+                            )
+
+                            st.write(
+                                "**Loại:** "
+                                + str(
+                                    data.get(
+                                        "transaction_type",
+                                        "chi"
+                                    )
+                                )
+                            )
+
+                            st.write(
+                                "**Số tiền:** "
+                                + format_money(
+                                    data.get(
+                                        "amount",
+                                        0
+                                    )
+                                )
+                            )
+
+                            st.write(
+                                "**Nội dung:** "
+                                + str(
+                                    data.get(
+                                        "description",
+                                        ""
+                                    )
+                                )
+                            )
+
+                        if data.get(
+                            "saved",
+                            False
+                        ):
+
+                            st.success(
+                                "💾 Giao dịch đã được lưu vào hệ thống."
+                            )
+
+                        else:
+
+                            st.warning(
+                                "⚠️ AI đọc được hóa đơn nhưng chưa xác định được số tiền nên chưa lưu giao dịch."
+                            )
+
+                except requests.exceptions.Timeout:
 
                     st.error(
-                        "❌ " + error
+                        "❌ Backend xử lý quá lâu. Vui lòng thử lại."
                     )
 
-                    return
+                except requests.exceptions.ConnectionError:
 
-                if result:
-
-                    data = result.get(
-                        "data",
-                        {}
+                    st.error(
+                        "❌ Không kết nối được Backend."
                     )
 
-                    st.success(
-                        "✅ Đã quét hóa đơn!"
+                except Exception as e:
+
+                    st.error(
+                        "❌ Lỗi xử lý ảnh: "
+                        + str(e)
                     )
 
-                    col1, col2, col3 = st.columns(3)
 
-                    with col1:
-                        st.metric(
-                            "💰 Số tiền",
-                            f"{float(data.get('amount', 0)):,.0f} ₫"
-                        )
+# =========================================================
+# LỊCH SỬ
+# =========================================================
 
-                    with col2:
-                        st.metric(
-                            "📂 Danh mục",
-                            data.get(
-                                "category",
-                                "Khác"
-                            )
-                        )
+def history_page():
 
-                    with col3:
-                        st.metric(
-                            "📝 Nội dung",
-                            data.get(
-                                "note",
-                                ""
-                            )
-                        )
-
-            except Exception as e:
-
-                st.error(
-                    f"❌ Lỗi xử lý ảnh: {str(e)}"
-                )
-
-
-# =========================
-# HISTORY
-# =========================
-
-def history():
-
-    st.title(
-        "📋 Lịch sử giao dịch"
-    )
+    st.title("📋 Lịch sử giao dịch")
 
     transactions = get_transactions()
 
     if not transactions:
 
         st.info(
-            "Chưa có giao dịch."
+            "Chưa có giao dịch nào."
         )
 
         return
 
-    df = pd.DataFrame(
+    display_transactions(
         transactions
     )
 
-    df["amount"] = pd.to_numeric(
-        df["amount"],
-        errors="coerce"
-    ).fillna(0)
 
-    col1, col2 = st.columns(2)
-
-    with col1:
-
-        filter_type = st.selectbox(
-            "Loại giao dịch",
-            [
-                "Tất cả",
-                "Thu",
-                "Chi"
-            ]
-        )
-
-    with col2:
-
-        categories = [
-            "Tất cả"
-        ]
-
-        if "category" in df.columns:
-
-            categories += sorted(
-                df["category"]
-                .dropna()
-                .astype(str)
-                .unique()
-                .tolist()
-            )
-
-        filter_category = st.selectbox(
-            "Danh mục",
-            categories
-        )
-
-    filtered = df.copy()
-
-    if filter_type == "Thu":
-
-        filtered = filtered[
-            filtered["type"] == "thu"
-        ]
-
-    elif filter_type == "Chi":
-
-        filtered = filtered[
-            filtered["type"] == "chi"
-        ]
-
-    if filter_category != "Tất cả":
-
-        filtered = filtered[
-            filtered["category"]
-            == filter_category
-        ]
-
-    if "type" in filtered.columns:
-
-        filtered["type"] = (
-            filtered["type"]
-            .map(
-                {
-                    "thu": "🟢 Thu",
-                    "chi": "🔴 Chi"
-                }
-            )
-            .fillna(
-                filtered["type"]
-            )
-        )
-
-    if "amount" in filtered.columns:
-
-        filtered["amount"] = (
-            filtered["amount"]
-            .apply(
-                lambda x:
-                f"{x:,.0f} ₫"
-            )
-        )
-
-    st.dataframe(
-        filtered,
-        use_container_width=True,
-        hide_index=True
-    )
-
-
-# =========================
-# STATISTICS
-# =========================
-
-def statistics():
-
-    st.title(
-        "📊 Thống kê"
-    )
-
-    transactions = get_transactions()
-
-    if not transactions:
-
-        st.info(
-            "Chưa có dữ liệu thống kê."
-        )
-
-        return
-
-    df = pd.DataFrame(
-        transactions
-    )
-
-    df["amount"] = pd.to_numeric(
-        df["amount"],
-        errors="coerce"
-    ).fillna(0)
-
-    total_income = df.loc[
-        df["type"] == "thu",
-        "amount"
-    ].sum()
-
-    total_expense = df.loc[
-        df["type"] == "chi",
-        "amount"
-    ].sum()
-
-    balance = (
-        total_income -
-        total_expense
-    )
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        st.metric(
-            "🟢 Tổng thu",
-            f"{total_income:,.0f} ₫"
-        )
-
-    with col2:
-        st.metric(
-            "🔴 Tổng chi",
-            f"{total_expense:,.0f} ₫"
-        )
-
-    with col3:
-        st.metric(
-            "💵 Số dư",
-            f"{balance:,.0f} ₫"
-        )
-
-    st.divider()
-
-    expense_df = df[
-        df["type"] == "chi"
-    ]
-
-    if not expense_df.empty:
-
-        st.subheader(
-            "💸 Chi tiêu theo danh mục"
-        )
-
-        summary = (
-            expense_df
-            .groupby("category")["amount"]
-            .sum()
-            .sort_values(
-                ascending=False
-            )
-        )
-
-        st.bar_chart(
-            summary
-        )
-
-
-# =========================
+# =========================================================
 # MAIN
-# =========================
+# =========================================================
 
-def main():
+if not st.session_state.logged_in:
 
-    if not st.session_state.logged_in:
+    if st.session_state.page == "Đăng ký":
 
-        login_page()
+        register_page()
 
     else:
 
-        sidebar()
+        login_page()
 
-        page = st.session_state.page
+else:
 
-        if page == "Dashboard":
+    sidebar()
 
-            dashboard()
+    if st.session_state.page == "Dashboard":
 
-        elif page == "Add":
+        dashboard_page()
 
-            add_transaction()
+    elif st.session_state.page == "AI":
 
-        elif page == "Scan":
+        ai_transaction_page()
 
-            scan_bill()
+    elif st.session_state.page == "Scan":
 
-        elif page == "History":
+        scan_bill_page()
 
-            history()
+    elif st.session_state.page == "History":
 
-        elif page == "Statistics":
+        history_page()
 
-            statistics()
+    else:
 
-        else:
-
-            dashboard()
-
-
-if __name__ == "__main__":
-    main()
+        dashboard_page()
