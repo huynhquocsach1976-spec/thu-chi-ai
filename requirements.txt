@@ -1,12 +1,7 @@
 fastapi
-uvicorn
-pydantic
-streamlit
-requests
-pillow
-easyocr
+uvicorn[standard]
 psycopg2-binary
 python-multipart
-pandas
 google-genai
-google-generativeai
+requests
+streamlit
