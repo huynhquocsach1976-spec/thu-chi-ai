@@ -27,32 +27,32 @@ st.set_page_config(
 
 
 # =========================================================
-# CUSTOM CSS (GIAO DIỆN ĐĂNG NHẬP NHỎ GỌN, BACKGROUND ĐẸP)
+# CUSTOM CSS (GIAO DIỆN SÁNG SỦA, HIỆN ĐẠI, THU GỌN)
 # =========================================================
 
 CUSTOM_CSS = """
 <style>
-/* Background toàn trang phong cách Gradient hiện đại */
+/* Background toàn trang phong cách Sáng sủa, Tươi mới */
 .stApp {
-    background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
-    color: #f8fafc;
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #f1f5f9 100%);
+    color: #1e293b;
 }
 
-/* Card Đăng nhập / Đăng ký căn giữa & thu nhỏ gọn */
+/* Card Đăng nhập / Đăng ký căn giữa, màu sáng, hiệu ứng kính mờ tinh tế */
 [data-testid="stForm"] {
-    background: rgba(30, 41, 59, 0.7) !important;
+    background: rgba(255, 255, 255, 0.85) !important;
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border: 1px solid rgba(226, 232, 240, 0.8) !important;
     border-radius: 16px !important;
     padding: 24px 28px !important;
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5) !important;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05) !important;
 }
 
 /* Căn chỉnh lại Tab Đăng nhập / Đăng ký */
 .stTabs [data-baseweb="tab-list"] {
     gap: 8px;
-    background-color: rgba(15, 23, 42, 0.6);
+    background-color: rgba(226, 232, 240, 0.6);
     padding: 6px;
     border-radius: 12px;
 }
@@ -60,18 +60,19 @@ CUSTOM_CSS = """
 .stTabs [data-baseweb="tab"] {
     border-radius: 8px;
     padding: 8px 16px;
-    color: #94a3b8;
+    color: #64748b;
+    font-weight: 500;
 }
 
 .stTabs [aria-selected="true"] {
-    background-color: #6366f1 !important;
+    background-color: #3b82f6 !important;
     color: #ffffff !important;
 }
 
-/* Nút bấm nổi bật hơn */
+/* Nút bấm sáng sủa, nổi bật */
 .stButton > button {
     border-radius: 10px !important;
-    background: linear-gradient(90deg, #6366f1 0%, #4f46e5 100%) !important;
+    background: linear-gradient(90deg, #3b82f6 0%, #2563eb 100%) !important;
     color: white !important;
     font-weight: 600 !important;
     border: none !important;
@@ -80,7 +81,13 @@ CUSTOM_CSS = """
 
 .stButton > button:hover {
     transform: translateY(-2px);
-    box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.4);
+    box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.3);
+}
+
+/* Tinh chỉnh nhãn chữ trong form cho dễ nhìn trên nền sáng */
+label {
+    color: #334155 !important;
+    font-weight: 500;
 }
 </style>
 """
@@ -229,20 +236,19 @@ def show_result(result, title_amount="💰 Số tiền"):
 
 
 # =========================================================
-# LOGIN / REGISTER PAGE (GIAO DIỆN THU NHỎ CĂN GIỮA)
+# LOGIN / REGISTER PAGE (GIAO DIỆN THU NHỎ CĂN GIỮA - SÁNG SỦA)
 # =========================================================
 
 if not st.session_state.logged_in:
 
-    # Căn giữa khung đăng nhập bằng 3 cột Streamlit
     col_left, col_center, col_right = st.columns([1, 1.8, 1])
 
     with col_center:
         st.markdown(
             """
             <div style="text-align: center; margin-top: 20px; margin-bottom: 20px;">
-                <h1 style="font-size: 2.2rem; margin-bottom: 0px;">💰 Thu Chi AI Pro</h1>
-                <p style="color: #94a3b8; font-size: 0.95rem;">Quản lý tài chính cá nhân thông minh bằng AI</p>
+                <h1 style="font-size: 2.2rem; margin-bottom: 0px; color: #1e293b;">💰 Thu Chi AI Pro</h1>
+                <p style="color: #64748b; font-size: 0.95rem;">Quản lý tài chính cá nhân thông minh bằng AI</p>
             </div>
             """,
             unsafe_allow_html=True
