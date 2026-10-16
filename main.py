@@ -1,142 +1,119 @@
 import os
 import re
-import hashlib
-import base64
 import json
+import hashlib
+from datetime import datetime
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
+
+
+# =========================================================
+# CONFIG
+# =========================================================
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+GEMINI_MODEL = "gemini-2.5-flash"
+
+if not DATABASE_URL:
+    raise RuntimeError("Thiếu DATABASE_URL")
+
+if not GEMINI_API_KEY:
+    raise RuntimeError("Thiếu GEMINI_API_KEY")
+
+
+# =========================================================
+# GEMINI
+# =========================================================
+
+client = genai.Client(
+    api_key=GEMINI_API_KEY
+)
 
 
 # =========================================================
 # FASTAPI
 # =========================================================
 
-app = FastAPI(title="Thu Chi AI Pro Backend")
+app = FastAPI(
+    title="Thu Chi AI Pro",
+    version="1.0"
+)
 
-
-# =========================================================
-# ENVIRONMENT VARIABLES
-# =========================================================
-
-DATABASE_URL = os.getenv("DATABASE_URL")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-
-
-# Render/PostgreSQL đôi khi trả về postgres://
-if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace(
-        "postgres://",
-        "postgresql://",
-        1
-    )
-
-
-# Cấu hình Gemini
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # =========================================================
 # DATABASE
 # =========================================================
 
-def get_db_connection():
-
-    if not DATABASE_URL:
-        raise HTTPException(
-            status_code=500,
-            detail="Chưa cấu hình DATABASE_URL trong Environment Variable!"
-        )
-
-    try:
-        return psycopg2.connect(DATABASE_URL)
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Lỗi kết nối PostgreSQL: {str(e)}"
-        )
+def get_connection():
+    return psycopg2.connect(DATABASE_URL)
 
 
-# =========================================================
-# KHỞI TẠO DATABASE
-# =========================================================
+def create_tables():
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            username VARCHAR(100) UNIQUE NOT NULL,
+            password VARCHAR(255),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    """)
+
+    cur.execute("""
+        ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS password VARCHAR(255);
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS transactions (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+            transaction_type VARCHAR(20) NOT NULL,
+            amount NUMERIC(15,2) NOT NULL,
+            description TEXT,
+            category VARCHAR(100),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    """)
+
+    conn.commit()
+
+    cur.close()
+    conn.close()
+
 
 @app.on_event("startup")
 def startup_event():
 
-    if not DATABASE_URL:
-        print("WARNING: Chưa có DATABASE_URL")
-        return
-
-    conn = None
-    cur = None
-
-    try:
-
-        conn = psycopg2.connect(DATABASE_URL)
-        cur = conn.cursor()
-
-        # -------------------------
-        # USERS
-        # -------------------------
-
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id SERIAL PRIMARY KEY,
-                username VARCHAR(255) UNIQUE NOT NULL,
-                password_hash VARCHAR(255) NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """)
-
-        # -------------------------
-        # TRANSACTIONS
-        # -------------------------
-
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS transactions (
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER REFERENCES users(id),
-                type VARCHAR(50) NOT NULL,
-                amount DOUBLE PRECISION NOT NULL,
-                category VARCHAR(100),
-                note TEXT,
-                date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """)
-
-        conn.commit()
-
-        print("Database initialization OK")
-
-    except Exception as e:
-
-        if conn:
-            conn.rollback()
-
-        print(f"Lỗi khởi tạo Database: {e}")
-
-    finally:
-
-        if cur:
-            cur.close()
-
-        if conn:
-            conn.close()
+    create_tables()
 
 
 # =========================================================
 # PASSWORD
 # =========================================================
 
-def hash_password(password: str) -> str:
+def hash_password(password):
 
     return hashlib.sha256(
         password.encode("utf-8")
@@ -147,22 +124,22 @@ def hash_password(password: str) -> str:
 # MODELS
 # =========================================================
 
-class AuthRequest(BaseModel):
+class RegisterRequest(BaseModel):
 
     username: str
     password: str
 
 
-class TransactionRequest(BaseModel):
+class LoginRequest(BaseModel):
+
+    username: str
+    password: str
+
+
+class AITransactionRequest(BaseModel):
 
     user_id: int
     text: str
-
-
-class BillScanRequest(BaseModel):
-
-    user_id: int
-    image_base64: str
 
 
 # =========================================================
@@ -174,7 +151,7 @@ def home():
 
     return {
         "status": "ok",
-        "message": "Backend Thu Chi AI Pro đang chạy bình thường"
+        "message": "Backend Thu Chi AI đang chạy bình thường"
     }
 
 
@@ -183,22 +160,38 @@ def home():
 # =========================================================
 
 @app.post("/register")
-def register(req: AuthRequest):
+def register(data: RegisterRequest):
 
-    conn = get_db_connection()
+    username = data.username.strip()
+    password = data.password
+
+    if len(username) < 3:
+
+        raise HTTPException(
+            status_code=400,
+            detail="Tên đăng nhập phải có ít nhất 3 ký tự"
+        )
+
+    if len(password) < 4:
+
+        raise HTTPException(
+            status_code=400,
+            detail="Mật khẩu phải có ít nhất 4 ký tự"
+        )
+
+    conn = get_connection()
     cur = conn.cursor()
 
-    username = req.username.lower().strip()
-    password_hash = hash_password(req.password)
-
     try:
+
+        password_hash = hash_password(password)
 
         cur.execute(
             """
             INSERT INTO users
-            (username, password_hash)
+            (username, password)
             VALUES (%s, %s)
-            RETURNING id;
+            RETURNING id
             """,
             (
                 username,
@@ -211,18 +204,18 @@ def register(req: AuthRequest):
         conn.commit()
 
         return {
-            "status": "success",
-            "user_id": user_id,
-            "username": username
+            "status": "ok",
+            "message": "Đăng ký thành công",
+            "user_id": user_id
         }
 
-    except Exception as e:
+    except psycopg2.errors.UniqueViolation:
 
         conn.rollback()
 
         raise HTTPException(
             status_code=400,
-            detail=f"Tài khoản đã tồn tại hoặc có lỗi: {str(e)}"
+            detail="Tên đăng nhập đã tồn tại"
         )
 
     finally:
@@ -236,499 +229,516 @@ def register(req: AuthRequest):
 # =========================================================
 
 @app.post("/login")
-def login(req: AuthRequest):
+def login(data: LoginRequest):
 
-    conn = get_db_connection()
+    username = data.username.strip()
+    password_hash = hash_password(
+        data.password
+    )
+
+    conn = get_connection()
 
     cur = conn.cursor(
         cursor_factory=RealDictCursor
     )
 
-    username = req.username.lower().strip()
-    password_hash = hash_password(req.password)
+    cur.execute(
+        """
+        SELECT id, username
+        FROM users
+        WHERE username = %s
+        AND password = %s
+        """,
+        (
+            username,
+            password_hash
+        )
+    )
+
+    user = cur.fetchone()
+
+    cur.close()
+    conn.close()
+
+    if not user:
+
+        raise HTTPException(
+            status_code=401,
+            detail="Sai tên đăng nhập hoặc mật khẩu"
+        )
+
+    return {
+        "status": "ok",
+        "message": "Đăng nhập thành công",
+        "user_id": user["id"],
+        "username": user["username"]
+    }
+
+
+# =========================================================
+# CLEAN JSON GEMINI
+# =========================================================
+
+def clean_json(text):
+
+    text = text.strip()
+
+    text = re.sub(
+        r"^```json\s*",
+        "",
+        text,
+        flags=re.IGNORECASE
+    )
+
+    text = re.sub(
+        r"^```\s*",
+        "",
+        text
+    )
+
+    text = re.sub(
+        r"\s*```$",
+        "",
+        text
+    )
+
+    start = text.find("{")
+    end = text.rfind("}")
+
+    if start >= 0 and end >= 0:
+
+        text = text[start:end + 1]
+
+    return text.strip()
+
+
+# =========================================================
+# AI PHÂN TÍCH
+# =========================================================
+
+def parse_ai_transaction(text):
+
+    prompt = f"""
+Bạn là AI quản lý thu chi cá nhân.
+
+Phân tích câu:
+
+{text}
+
+BẮT BUỘC trả về JSON hợp lệ.
+
+Cấu trúc:
+
+{{
+  "transaction_type": "expense",
+  "amount": 40000,
+  "description": "ăn cơm",
+  "category": "Ăn uống"
+}}
+
+Quy tắc:
+
+1. transaction_type chỉ được:
+expense hoặc income
+
+2. amount phải là số nguyên.
+
+3. Quy đổi:
+40k = 40000
+50k = 50000
+100k = 100000
+1tr = 1000000
+1 triệu = 1000000
+
+4. Nếu là chi tiêu:
+transaction_type = expense
+
+5. Nếu là tiền nhận được:
+transaction_type = income
+
+6. category có thể:
+Ăn uống
+Mua sắm
+Đi lại
+Hóa đơn
+Lương
+Thưởng
+Y tế
+Giải trí
+Khác
+
+Ví dụ:
+
+ăn cơm 40k
+
+JSON:
+
+{{
+  "transaction_type": "expense",
+  "amount": 40000,
+  "description": "ăn cơm",
+  "category": "Ăn uống"
+}}
+
+CHỈ TRẢ JSON.
+KHÔNG GIẢI THÍCH.
+"""
 
     try:
 
-        cur.execute(
-            """
-            SELECT id, username
-            FROM users
-            WHERE username = %s
-            AND password_hash = %s;
-            """,
-            (
-                username,
-                password_hash
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt
+        )
+
+        if not response.text:
+
+            raise Exception(
+                "Gemini không trả về dữ liệu"
+            )
+
+        result = clean_json(
+            response.text
+        )
+
+        data = json.loads(result)
+
+        if not isinstance(data, dict):
+
+            raise Exception(
+                "Gemini trả về dữ liệu không hợp lệ"
+            )
+
+        amount = data.get(
+            "amount",
+            0
+        )
+
+        try:
+
+            amount = float(amount)
+
+        except:
+
+            amount = 0
+
+        if amount <= 0:
+
+            raise Exception(
+                "AI không xác định được số tiền"
+            )
+
+        transaction_type = data.get(
+            "transaction_type",
+            "expense"
+        )
+
+        if transaction_type not in [
+            "income",
+            "expense"
+        ]:
+
+            transaction_type = "expense"
+
+        description = str(
+            data.get(
+                "description",
+                text
             )
         )
 
-        user = cur.fetchone()
-
-        if not user:
-
-            raise HTTPException(
-                status_code=401,
-                detail="Sai thông tin đăng nhập!"
+        category = str(
+            data.get(
+                "category",
+                "Khác"
             )
+        )
 
         return {
-            "status": "success",
-            "user_id": user["id"],
-            "username": user["username"]
+            "transaction_type": transaction_type,
+            "amount": amount,
+            "description": description,
+            "category": category
         }
 
-    finally:
+    except Exception as e:
 
-        cur.close()
-        conn.close()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Lỗi AI: {str(e)}"
+        )
 
 
 # =========================================================
-# THÊM GIAO DỊCH BẰNG AI / TEXT
+# ADD TRANSACTION
 # =========================================================
 
 @app.post("/add-transaction-ai")
-def add_transaction_ai(req: TransactionRequest):
+def add_transaction_ai(
+    data: AITransactionRequest
+):
 
-    text = req.text.lower().strip()
+    text = data.text.strip()
 
     if not text:
 
         raise HTTPException(
             status_code=400,
-            detail="Nội dung giao dịch không được để trống!"
+            detail="Vui lòng nhập nội dung giao dịch"
         )
 
-    # -----------------------------------------------------
-    # TÌM SỐ TIỀN
-    # -----------------------------------------------------
-
-    amount = 0.0
-
-    match = re.search(
-        r'(\d+(?:[.,]\d+)?)\s*(k|m|tr|triệu|nghìn|ngan)?',
+    ai_data = parse_ai_transaction(
         text
     )
 
-    if match:
-
-        raw_num = float(
-            match.group(1).replace(",", ".")
-        )
-
-        unit = match.group(2)
-
-        if unit in ["k", "nghìn", "ngan"]:
-
-            amount = raw_num * 1000
-
-        elif unit in ["m", "tr", "triệu"]:
-
-            amount = raw_num * 1000000
-
-        else:
-
-            if raw_num >= 1000:
-                amount = raw_num
-            else:
-                amount = raw_num * 1000
-
-    else:
-
-        raise HTTPException(
-            status_code=400,
-            detail="Không tìm thấy số tiền hợp lệ trong câu nhập!"
-        )
-
-    # -----------------------------------------------------
-    # PHÂN BIỆT THU / CHI
-    # -----------------------------------------------------
-
-    tx_type = "chi"
-
-    income_keywords = [
-        "lương",
-        "luong",
-        "thu",
-        "được",
-        "duoc",
-        "cho",
-        "thưởng",
-        "thu nhập",
-        "thu nhap",
-        "nhận",
-        "nhan"
-    ]
-
-    if any(keyword in text for keyword in income_keywords):
-
-        tx_type = "thu"
-
-    # -----------------------------------------------------
-    # PHÂN LOẠI
-    # -----------------------------------------------------
-
-    category = "Khác"
-
-    food_keywords = [
-        "cơm",
-        "com",
-        "bún",
-        "bun",
-        "phở",
-        "pho",
-        "cà phê",
-        "ca phe",
-        "ăn",
-        "an",
-        "uống",
-        "uong"
-    ]
-
-    transport_keywords = [
-        "xăng",
-        "xang",
-        "xe",
-        "grab",
-        "taxi",
-        "be",
-        "di chuyển",
-        "di chuyen"
-    ]
-
-    bill_keywords = [
-        "tiền nhà",
-        "tien nha",
-        "điện",
-        "dien",
-        "nước",
-        "nuoc",
-        "mạng",
-        "mang",
-        "internet"
-    ]
-
-    shopping_keywords = [
-        "mua",
-        "quần áo",
-        "quan ao",
-        "giày",
-        "giay",
-        "điện thoại",
-        "dien thoai"
-    ]
-
-    if any(keyword in text for keyword in food_keywords):
-
-        category = "Ăn uống"
-
-    elif any(keyword in text for keyword in transport_keywords):
-
-        category = "Di chuyển"
-
-    elif any(keyword in text for keyword in bill_keywords):
-
-        category = "Hóa đơn"
-
-    elif any(keyword in text for keyword in shopping_keywords):
-
-        category = "Mua sắm"
-
-    # -----------------------------------------------------
-    # LƯU DATABASE
-    # -----------------------------------------------------
-
-    conn = get_db_connection()
+    conn = get_connection()
     cur = conn.cursor()
 
+    cur.execute(
+        """
+        INSERT INTO transactions
+        (
+            user_id,
+            transaction_type,
+            amount,
+            description,
+            category
+        )
+        VALUES (%s, %s, %s, %s, %s)
+        RETURNING id
+        """,
+        (
+            data.user_id,
+            ai_data["transaction_type"],
+            ai_data["amount"],
+            ai_data["description"],
+            ai_data["category"]
+        )
+    )
+
+    transaction_id = cur.fetchone()[0]
+
+    conn.commit()
+
+    cur.close()
+    conn.close()
+
+    return {
+        "status": "ok",
+        "message": "Đã thêm giao dịch",
+        "transaction_id": transaction_id,
+        "transaction_type": ai_data["transaction_type"],
+        "amount": ai_data["amount"],
+        "description": ai_data["description"],
+        "category": ai_data["category"]
+    }
+
+
+# =========================================================
+# GET TRANSACTIONS
+# =========================================================
+
+@app.get("/transactions/{user_id}")
+def get_transactions(user_id: int):
+
+    conn = get_connection()
+
+    cur = conn.cursor(
+        cursor_factory=RealDictCursor
+    )
+
+    cur.execute(
+        """
+        SELECT
+            id,
+            transaction_type,
+            amount,
+            description,
+            category,
+            created_at
+        FROM transactions
+        WHERE user_id = %s
+        ORDER BY created_at DESC
+        """,
+        (user_id,)
+    )
+
+    rows = cur.fetchall()
+
+    cur.close()
+    conn.close()
+
+    result = []
+
+    for row in rows:
+
+        result.append({
+            "id": row["id"],
+            "transaction_type": row[
+                "transaction_type"
+            ],
+            "amount": float(
+                row["amount"]
+            ),
+            "description": row[
+                "description"
+            ],
+            "category": row[
+                "category"
+            ],
+            "created_at": (
+                row["created_at"].strftime(
+                    "%d/%m/%Y %H:%M"
+                )
+                if isinstance(
+                    row["created_at"],
+                    datetime
+                )
+                else str(
+                    row["created_at"]
+                )
+            )
+        })
+
+    return result
+
+
+# =========================================================
+# SCAN BILL
+# =========================================================
+
+@app.post("/scan-bill")
+async def scan_bill(
+    user_id: int,
+    file: UploadFile = File(...)
+):
+
     try:
+
+        image_bytes = await file.read()
+
+        if not image_bytes:
+
+            raise HTTPException(
+                status_code=400,
+                detail="File ảnh rỗng"
+            )
+
+        content_type = (
+            file.content_type
+            or "image/jpeg"
+        )
+
+        prompt = """
+Đọc hóa đơn trong hình ảnh.
+
+Trả về JSON:
+
+{
+  "transaction_type": "expense",
+  "amount": 0,
+  "description": "",
+  "category": ""
+}
+
+amount là tổng tiền phải trả.
+
+Chỉ trả JSON.
+"""
+
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=[
+                types.Part.from_bytes(
+                    data=image_bytes,
+                    mime_type=content_type
+                ),
+                prompt
+            ]
+        )
+
+        result = clean_json(
+            response.text
+        )
+
+        ai_data = json.loads(result)
+
+        amount = float(
+            ai_data.get(
+                "amount",
+                0
+            )
+        )
+
+        if amount <= 0:
+
+            raise HTTPException(
+                status_code=400,
+                detail="Không đọc được số tiền"
+            )
+
+        description = str(
+            ai_data.get(
+                "description",
+                "Hóa đơn"
+            )
+        )
+
+        category = str(
+            ai_data.get(
+                "category",
+                "Khác"
+            )
+        )
+
+        conn = get_connection()
+        cur = conn.cursor()
 
         cur.execute(
             """
             INSERT INTO transactions
             (
                 user_id,
-                type,
+                transaction_type,
                 amount,
-                category,
-                note
+                description,
+                category
             )
             VALUES (%s, %s, %s, %s, %s)
-            RETURNING id;
+            RETURNING id
             """,
             (
-                req.user_id,
-                tx_type,
+                user_id,
+                "expense",
                 amount,
-                category,
-                req.text
+                description,
+                category
             )
         )
 
-        tx_id = cur.fetchone()[0]
+        transaction_id = cur.fetchone()[0]
 
         conn.commit()
 
-        return {
-            "status": "success",
-            "message": f"Đã ghi nhận: {req.text}",
-            "data": {
-                "id": tx_id,
-                "type": tx_type,
-                "amount": amount,
-                "category": category,
-                "note": req.text
-            }
-        }
-
-    except Exception as e:
-
-        conn.rollback()
-
-        raise HTTPException(
-            status_code=500,
-            detail=f"Lỗi lưu Database: {str(e)}"
-        )
-
-    finally:
-
         cur.close()
         conn.close()
 
-
-# =========================================================
-# LẤY LỊCH SỬ GIAO DỊCH
-# =========================================================
-# ĐÂY LÀ ROUTE ĐANG BỊ THIẾU TRÊN RENDER
-# =========================================================
-
-@app.get("/transactions/{user_id}")
-def get_transactions(user_id: int):
-
-    conn = get_db_connection()
-
-    cur = conn.cursor(
-        cursor_factory=RealDictCursor
-    )
-
-    try:
-
-        cur.execute(
-            """
-            SELECT
-                id,
-                type,
-                amount,
-                category,
-                note,
-                date
-            FROM transactions
-            WHERE user_id = %s
-            ORDER BY date DESC;
-            """,
-            (user_id,)
-        )
-
-        records = cur.fetchall()
-
-        # Chuyển datetime thành chuỗi JSON
-        data = []
-
-        for record in records:
-
-            item = dict(record)
-
-            if item.get("date"):
-
-                item["date"] = item["date"].isoformat()
-
-            data.append(item)
-
         return {
-            "status": "success",
-            "data": data
+            "status": "ok",
+            "message": "Đã quét và lưu hóa đơn",
+            "transaction_id": transaction_id,
+            "transaction_type": "expense",
+            "amount": amount,
+            "description": description,
+            "category": category
         }
 
-    except Exception as e:
-
-        raise HTTPException(
-            status_code=500,
-            detail=f"Lỗi lấy lịch sử giao dịch: {str(e)}"
-        )
-
-    finally:
-
-        cur.close()
-        conn.close()
-
-
-# =========================================================
-# QUÉT HÓA ĐƠN BẰNG GEMINI AI
-# =========================================================
-
-@app.post("/scan-bill")
-def scan_bill(req: BillScanRequest):
-
-    if not GEMINI_API_KEY:
-
-        raise HTTPException(
-            status_code=500,
-            detail="Chưa cấu hình GEMINI_API_KEY!"
-        )
-
-    try:
-
-        # ---------------------------------------------
-        # GIẢI MÃ BASE64
-        # ---------------------------------------------
-
-        image_bytes = base64.b64decode(
-            req.image_base64
-        )
-
-        # ---------------------------------------------
-        # GEMINI
-        # ---------------------------------------------
-
-        model = genai.GenerativeModel(
-            "gemini-1.5-flash"
-        )
-
-        prompt = """
-Phân tích hình ảnh hóa đơn/bill/mã QR này.
-
-Hãy trả về JSON thuần túy theo cấu trúc:
-
-{
-    "amount": 0,
-    "category": "Ăn uống",
-    "note": "Tên cửa hàng hoặc nội dung thanh toán"
-}
-
-Quy tắc:
-
-- amount là tổng tiền thanh toán kiểu số.
-- category chỉ nên thuộc:
-  "Ăn uống",
-  "Mua sắm",
-  "Di chuyển",
-  "Hóa đơn",
-  "Khác".
-- note là tên cửa hàng hoặc nội dung thanh toán ngắn gọn.
-- Chỉ trả về JSON.
-- Không được trả về Markdown.
-- Không được thêm ```json.
-"""
-
-        response = model.generate_content(
-            [
-                prompt,
-                {
-                    "mime_type": "image/jpeg",
-                    "data": image_bytes
-                }
-            ]
-        )
-
-        clean_text = response.text.strip()
-
-        clean_text = clean_text.replace(
-            "```json",
-            ""
-        )
-
-        clean_text = clean_text.replace(
-            "```",
-            ""
-        )
-
-        clean_text = clean_text.strip()
-
-        data = json.loads(clean_text)
-
-        amount = float(
-            data.get("amount", 0)
-        )
-
-        category = data.get(
-            "category",
-            "Khác"
-        )
-
-        note = data.get(
-            "note",
-            "Quét hóa đơn"
-        )
-
-        # ---------------------------------------------
-        # LƯU DATABASE
-        # ---------------------------------------------
-
-        conn = get_db_connection()
-        cur = conn.cursor()
-
-        try:
-
-            cur.execute(
-                """
-                INSERT INTO transactions
-                (
-                    user_id,
-                    type,
-                    amount,
-                    category,
-                    note
-                )
-                VALUES (%s, %s, %s, %s, %s)
-                RETURNING id;
-                """,
-                (
-                    req.user_id,
-                    "chi",
-                    amount,
-                    category,
-                    note
-                )
-            )
-
-            tx_id = cur.fetchone()[0]
-
-            conn.commit()
-
-            return {
-                "status": "success",
-                "data": {
-                    "id": tx_id,
-                    "amount": amount,
-                    "category": category,
-                    "note": note
-                }
-            }
-
-        except Exception as e:
-
-            conn.rollback()
-
-            raise HTTPException(
-                status_code=500,
-                detail=f"Lỗi lưu Database: {str(e)}"
-            )
-
-        finally:
-
-            cur.close()
-            conn.close()
-
-    except json.JSONDecodeError:
-
-        raise HTTPException(
-            status_code=500,
-            detail="Gemini không trả về JSON hợp lệ!"
-        )
+    except HTTPException:
+        raise
 
     except Exception as e:
 
         raise HTTPException(
             status_code=500,
-            detail=f"Lỗi xử lý hóa đơn AI: {str(e)}"
+            detail=f"Lỗi xử lý ảnh: {str(e)}"
         )
