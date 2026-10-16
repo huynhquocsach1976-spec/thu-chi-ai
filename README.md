@@ -30,3 +30,39 @@
 ```bash
 git clone [https://github.com/TÊN_GITHUB_CỦA_BẠN/thu-chi-ai.git](https://github.com/TÊN_GITHUB_CỦA_BẠN/thu-chi-ai.git)
 cd thu-chi-ai
+2. Cấu hình và chạy Backend (FastAPI)
+Cài đặt các thư viện cần thiết:
+
+Bash
+pip install fastapi uvicorn psycopg2-binary pydantic google-genai requests pandas streamlit
+Thiết lập biến môi trường (tạo file .env hoặc cấu hình trực tiếp):
+
+Đoạn mã
+DATABASE_URL=postgresql://user:password@host:port/dbname
+GEMINI_API_KEY=your_google_gemini_api_key
+Chạy server backend:
+
+Bash
+uvicorn main:app --reload --port 8000
+3. Cấu hình và chạy Frontend (Streamlit)
+Mở một terminal mới và trỏ đến thư mục dự án.
+
+Thiết lập biến môi trường trỏ tới backend (nếu chạy local):
+
+Bash
+# Trên Windows PowerShell
+$env:BACKEND_URL="http://localhost:8000"
+
+# Trên Mac/Linux
+export BACKEND_URL="http://localhost:8000"
+Chạy ứng dụng Streamlit:
+
+Bash
+streamlit run app.py
+☁️ Hướng dẫn Deploy lên Cloud
+Backend (Render): Tạo một Web Service trên Render, kết nối với kho lưu trữ GitHub, cài đặt Start Command là uvicorn main:app --host 0.0.0.0 --port $PORT, và thêm các biến môi trường (DATABASE_URL, GEMINI_API_KEY).
+
+Frontend (Streamlit Cloud): Tạo ứng dụng mới trên Streamlit Cloud, trỏ tới file app.py, sau đó cấu hình biến môi trường BACKEND_URL trỏ tới URL dịch vụ Render của bạn.
+
+👨‍💻 Tác giả
+Phát triển bởi Nhóm 1 ( Huỳnh Quốc Sách, Trương Thị Hồng Đào, Đặng Hồng Sơn, Đổng Duy Khang).
