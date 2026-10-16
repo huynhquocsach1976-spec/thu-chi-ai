@@ -1,7 +1,9 @@
 fastapi
-uvicorn[standard]
+uvicorn
 psycopg2-binary
-python-multipart
-google-genai
+pydantic
 requests
+google-genai
 streamlit
+pandas
+plotly
