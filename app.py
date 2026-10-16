@@ -9,10 +9,11 @@ import streamlit as st
 # CONFIG & CLEAN BACKEND URL
 # =========================================================
 
-raw_backend_url = os.getenv("BACKEND_URL", "[https://thu-chi-ai.onrender.com](https://thu-chi-ai.onrender.com)")
+raw_backend_url = os.getenv("BACKEND_URL", "https://thu-chi-ai.onrender.com").strip().strip('"').strip("'")
+if not raw_backend_url.startswith("http://") and not raw_backend_url.startswith("https://"):
+    raw_backend_url = "https://" + raw_backend_url
 
-# Xử lý sạch ký tự xuống dòng (\n), dấu cách thừa, dấu ngoặc kép vô tình bị dán
-BACKEND_URL = raw_backend_url.strip().strip('"').strip("'").rstrip("/")
+BACKEND_URL = raw_backend_url.rstrip("/")
 
 st.set_page_config(
     page_title="Thu Chi AI Pro",
