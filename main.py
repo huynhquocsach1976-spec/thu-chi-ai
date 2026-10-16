@@ -102,6 +102,20 @@ def create_tables():
             );
             """
         )
+        # Bổ sung các cột còn thiếu nếu bảng cũ được tạo từ phiên bản trước
+        cur.execute(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;"
+        )
+        for ddl in (
+            "ADD COLUMN IF NOT EXISTS user_id INTEGER",
+            "ADD COLUMN IF NOT EXISTS transaction_type VARCHAR(20) DEFAULT 'Chi'",
+            "ADD COLUMN IF NOT EXISTS amount NUMERIC(15,2) DEFAULT 0",
+            "ADD COLUMN IF NOT EXISTS description TEXT",
+            "ADD COLUMN IF NOT EXISTS category VARCHAR(100)",
+            "ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+        ):
+            cur.execute(f"ALTER TABLE transactions {ddl};")
+
         cur.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_transactions_user
