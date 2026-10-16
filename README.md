@@ -1,68 +1,47 @@
 # 💰 Thu Chi AI Pro
 
-Ứng dụng quản lý tài chính cá nhân thông minh tích hợp trí tuệ nhân tạo (**Google Gemini AI**), giúp bạn tự động phân tích giao dịch bằng ngôn ngữ tự nhiên, quét hóa đơn từ ảnh, thống kê chi tiêu trực quan theo danh mục và quản lý lịch sử thu chi dễ dàng.
+Ứng dụng quản lý tài chính cá nhân thông minh tích hợp trí tuệ nhân tạo (**Google Gemini AI**). Giúp bạn tự động hóa quy trình ghi chép thu chi bằng ngôn ngữ tự nhiên, quét hóa đơn từ ảnh và theo dõi tài chính trực quan.
+
+🔗 **Link trải nghiệm trực tiếp:** [https://thu-chi-ai.streamlit.app](ĐIỀN_LINK_STREAMLIT_CỦA_BẠN_VÀO_ĐÂY)
 
 ---
 
-## 🚀 Các tính năng nổi bật
+## ✨ Các tính năng nổi bật
 
-- **🔐 Xác thực bảo mật:** Đăng nhập và đăng ký tài khoản với thuật toán mã hóa mật khẩu an toàn (`PBKDF2`).
-- **🤖 Nhập giao dịch bằng AI:** Nhập câu lệnh tự nhiên (ví dụ: *"ăn cơm 40k"*, *"nhận lương 20 triệu"*, *"đổ xăng 2tr5"*), AI sẽ tự động bóc tách số tiền, phân loại danh mục và lưu trữ.
-- **📷 Quét hóa đơn tự động:** Tải lên ảnh hóa đơn (JPG, PNG, WEBP), AI sẽ đọc và tự động điền thông tin thanh toán.
-- **📊 Thống kê & Biểu đồ:** Xem tổng thu, tổng chi, số dư và biểu đồ cột trực quan chi tiêu theo từng danh mục.
-- **📅 Lọc dữ liệu theo kỳ:** Dễ dàng lọc lịch sử giao dịch theo tháng/năm.
-- **✏️ Quản lý linh hoạt:** Hỗ trợ tính năng Sửa hoặc Xóa trực tiếp từng giao dịch trong lịch sử.
+- **🔐 Bảo mật tài khoản:** Đăng nhập an toàn với thuật toán mã hóa mật khẩu chuẩn quốc tế (`PBKDF2`).
+- **🤖 Nhập liệu thông minh bằng AI:** Chỉ cần gõ văn bản tiếng Việt tự nhiên, AI sẽ tự bóc tách số tiền, phân loại và lưu trữ.
+- **📷 Quét hóa đơn tự động (OCR):** Tải lên ảnh chụp hóa đơn, hệ thống sẽ tự động đọc tổng tiền và tên cửa hàng.
+- **📊 Biểu đồ thống kê trực quan:** Theo dõi dòng tiền Thu – Chi và tỷ lệ phân bổ chi tiêu theo danh mục qua biểu đồ cột sinh động.
+- **📅 Bộ lọc theo kỳ:** Dễ dàng tra cứu lại lịch sử tài chính theo từng tháng/năm cụ thể.
+- **✏️ Tùy chỉnh linh hoạt:** Hỗ trợ tính năng Sửa hoặc Xóa nhanh chóng trực tiếp trên từng giao dịch.
+
+---
+
+## 🚀 Hướng dẫn sử dụng nhanh (Quick Guide)
+
+1. **Đăng ký tài khoản:** Chuyển sang tab **Đăng ký**, tạo tên đăng nhập và mật khẩu riêng cho bạn.
+2. **Nhập giao dịch:** 
+   - Vào tab **Nhập giao dịch AI** và gõ ví dụ: `ăn sáng 35k`, `nhận lương 15 triệu`, `đổ xăng 100k`.
+   - Hoặc vào tab **Quét hóa đơn** để tải ảnh hóa đơn thanh toán lên.
+3. **Xem báo cáo:** Chuyển sang tab **Lịch sử & Thống kê** để xem tổng số dư, biểu đồ chi tiêu và quản lý lại các giao dịch cũ.
+
+---
+
+## 💡 Ví dụ câu lệnh AI hỗ trợ
+Bạn có thể nhập bất kỳ câu giao dịch nào bằng tiếng Việt, ví dụ:
+- *"Ăn trưa cơm tấm 50k"* ➔ Tự động lưu loại **Chi**, danh mục **Ăn uống**, số tiền **50,000 đ**.
+- *"Nhận tiền bán laptop 8 triệu 5"* ➔ Tự động lưu loại **Thu**, danh mục **Khác**, số tiền **8,500,000 đ**.
+- *"Tiền điện tháng này 450k"* ➔ Tự động lưu loại **Chi**, danh mục **Hóa đơn/Tiện ích**, số tiền **450,000 đ**.
 
 ---
 
 ## 🛠️ Công nghệ sử dụng
-
-- **Backend:** FastAPI, Python, PostgreSQL (`psycopg2`), Pydantic, Uvicorn.
-- **AI Engine:** Google GenAI SDK (`google-genai`, model `gemini-2.5-flash`).
+- **Backend:** FastAPI, Python, PostgreSQL (`psycopg2`), Pydantic.
+- **AI Engine:** Google GenAI SDK (`google-genai`, mô hình `gemini-2.5-flash`).
 - **Frontend:** Streamlit, Pandas, Requests.
-- **Deployment:** Render (Backend), Streamlit Cloud (Frontend).
+- **Cloud Hosting:** Render (Backend API) & Streamlit Cloud (Frontend UI).
 
 ---
 
-## ⚙️ Hướng dẫn cài đặt chạy thử (Local)
-
-### 1. Clone repository về máy
-```bash
-git clone [https://github.com/TÊN_GITHUB_CỦA_BẠN/thu-chi-ai.git](https://github.com/TÊN_GITHUB_CỦA_BẠN/thu-chi-ai.git)
-cd thu-chi-ai
-2. Cấu hình và chạy Backend (FastAPI)
-Cài đặt các thư viện cần thiết:
-
-Bash
-pip install fastapi uvicorn psycopg2-binary pydantic google-genai requests pandas streamlit
-Thiết lập biến môi trường (tạo file .env hoặc cấu hình trực tiếp):
-
-Đoạn mã
-DATABASE_URL=postgresql://user:password@host:port/dbname
-GEMINI_API_KEY=your_google_gemini_api_key
-Chạy server backend:
-
-Bash
-uvicorn main:app --reload --port 8000
-3. Cấu hình và chạy Frontend (Streamlit)
-Mở một terminal mới và trỏ đến thư mục dự án.
-
-Thiết lập biến môi trường trỏ tới backend (nếu chạy local):
-
-Bash
-# Trên Windows PowerShell
-$env:BACKEND_URL="http://localhost:8000"
-
-# Trên Mac/Linux
-export BACKEND_URL="http://localhost:8000"
-Chạy ứng dụng Streamlit:
-
-Bash
-streamlit run app.py
-☁️ Hướng dẫn Deploy lên Cloud
-Backend (Render): Tạo một Web Service trên Render, kết nối với kho lưu trữ GitHub, cài đặt Start Command là uvicorn main:app --host 0.0.0.0 --port $PORT, và thêm các biến môi trường (DATABASE_URL, GEMINI_API_KEY).
-
-Frontend (Streamlit Cloud): Tạo ứng dụng mới trên Streamlit Cloud, trỏ tới file app.py, sau đó cấu hình biến môi trường BACKEND_URL trỏ tới URL dịch vụ Render của bạn.
-
-👨‍💻 Tác giả
-Phát triển bởi Nhóm 1 ( Huỳnh Quốc Sách, Trương Thị Hồng Đào, Đặng Hồng Sơn, Đổng Duy Khang).
+## 👨‍💻 Tác giả & Phát triển
+Phát triển bởi **[Tên của bạn]**. Mọi đóng góp hoặc báo lỗi xin vui lòng liên hệ qua GitHub repository.
