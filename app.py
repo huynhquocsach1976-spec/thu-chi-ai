@@ -1,6 +1,7 @@
 import os
 from datetime import datetime
 import pandas as pd
+import plotly.express as px
 import requests
 import streamlit as st
 
@@ -9,11 +10,10 @@ import streamlit as st
 # CONFIG & CLEAN BACKEND URL
 # =========================================================
 
-raw_backend_url = os.getenv("BACKEND_URL", "https://thu-chi-ai.onrender.com").strip().strip('"').strip("'")
-if not raw_backend_url.startswith("http://") and not raw_backend_url.startswith("https://"):
-    raw_backend_url = "https://" + raw_backend_url
+raw_backend_url = os.getenv("BACKEND_URL", "https://thu-chi-ai.onrender.com")
 
-BACKEND_URL = raw_backend_url.rstrip("/")
+# Xử lý sạch ký tự xuống dòng (\n), dấu cách thừa, dấu ngoặc kép vô tình bị dán
+BACKEND_URL = raw_backend_url.strip().strip('"').strip("'").rstrip("/")
 
 st.set_page_config(
     page_title="Thu Chi AI Pro",
@@ -372,12 +372,22 @@ with tab_history:
 
             st.divider()
 
-            # Biểu đồ chi tiêu theo danh mục
-            st.markdown("### 📈 Biểu đồ chi tiêu theo danh mục")
+            # Biểu đồ hình tròn (Pie/Donut Chart) chi tiêu theo danh mục
+            st.markdown("### 🥧 Biểu đồ tỷ lệ chi tiêu theo danh mục")
             df_expense = df_filtered[df_filtered["transaction_type"] == "Chi"]
             if not df_expense.empty:
-                cat_grouped = df_expense.groupby("category")["amount"].sum()
-                st.bar_chart(cat_grouped)
+                cat_grouped = df_expense.groupby("category")["amount"].sum().reset_index()
+                
+                # Vẽ biểu đồ tròn dạng Donut (có lỗ ở giữa nhìn hiện đại)
+                fig = px.pie(
+                    cat_grouped, 
+                    names="category", 
+                    values="amount", 
+                    hole=0.4,
+                    color_discrete_sequence=px.colors.qualitative.Pastel
+                )
+                fig.update_traces(textposition='inside', textinfo='percent+label')
+                st.plotly_chart(fig, use_container_width=True)
             else:
                 st.info("Không có dữ liệu chi tiêu trong kỳ này để hiển thị biểu đồ.")
 
