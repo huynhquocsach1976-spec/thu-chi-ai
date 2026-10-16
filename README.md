@@ -44,4 +44,4 @@ Bạn có thể nhập bất kỳ câu giao dịch nào bằng tiếng Việt, v
 ---
 
 ## 👨‍💻 Tác giả & Phát triển
-Phát triển bởi **[Tên của bạn]**. Mọi đóng góp hoặc báo lỗi xin vui lòng liên hệ qua GitHub repository.
+Phát triển bởi **NHÓM 1: Huỳnh Quốc Sách; Trương Thị Hồng Đào; Đặng Hồng Sơn; Đổng Duy Khang**. Mọi đóng góp hoặc báo lỗi xin vui lòng liên hệ qua GitHub repository.
