@@ -5,6 +5,9 @@ pydantic
 python-multipart
 PyJWT
 google-genai
+openpyxl
+reportlab
+font-roboto
 streamlit
 pandas
 requests
