@@ -38,11 +38,17 @@ def clean_url(url):
 
 BACKEND_URL = clean_url(get_config("BACKEND_URL", "https://thu-chi-ai.onrender.com"))
 TIMEZONE = get_config("APP_TIMEZONE", "Asia/Ho_Chi_Minh")
+# Giữ đăng nhập khi tải lại trang (F5). Đặt REMEMBER_LOGIN=0 để tắt.
+REMEMBER_LOGIN = str(get_config("REMEMBER_LOGIN", "1")).strip().lower() not in ("0", "false", "no", "off")
+SESSION_PARAM = "s"
 
+TOTAL_LABEL = "Tổng chi tiêu"
 CATEGORIES = [
     "Ăn uống", "Di chuyển", "Mua sắm", "Hóa đơn & Tiện ích", "Nhà ở",
     "Giải trí", "Sức khỏe", "Giáo dục", "Lương", "Thưởng", "Đầu tư", "Khác",
 ]
+EXPENSE_CATEGORIES = [c for c in CATEGORIES if c not in ("Lương", "Thưởng")]
+LEVEL_ICON = {"ok": "🟢", "warning": "🟠", "over": "🔴"}
 COLD_START_HINT = "Server miễn phí có thể mất 30–60 giây để khởi động nếu lâu không dùng."
 
 
@@ -62,12 +68,12 @@ st.markdown(
 .stTabs [data-baseweb="tab-list"] { gap: 8px; background: rgba(226,232,240,0.6); padding: 6px; border-radius: 12px; }
 .stTabs [data-baseweb="tab"] { border-radius: 8px; padding: 8px 16px; color: #64748b; font-weight: 500; }
 .stTabs [aria-selected="true"] { background-color: #3b82f6 !important; color: #fff !important; }
-.stButton > button, [data-testid="stFormSubmitButton"] > button {
+.stButton > button, [data-testid="stFormSubmitButton"] > button, .stDownloadButton > button {
     width: 100%; border-radius: 10px !important; font-weight: 600 !important;
     background: linear-gradient(90deg, #3b82f6 0%, #2563eb 100%) !important;
     color: #fff !important; border: none !important; transition: all .25s ease !important;
 }
-.stButton > button:hover, [data-testid="stFormSubmitButton"] > button:hover {
+.stButton > button:hover, [data-testid="stFormSubmitButton"] > button:hover, .stDownloadButton > button:hover {
     transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(59,130,246,.3);
 }
 label { color: #334155 !important; font-weight: 500; }
@@ -89,17 +95,33 @@ def is_logged_in():
     return bool(st.session_state.token)
 
 
+def remember(token):
+    """Lưu token vào URL (?s=...) để F5 không bị đăng xuất."""
+    if REMEMBER_LOGIN and token:
+        st.query_params[SESSION_PARAM] = token
+
+
+def forget():
+    try:
+        if SESSION_PARAM in st.query_params:
+            del st.query_params[SESSION_PARAM]
+    except Exception:
+        pass
+
+
 def start_session(result):
     st.session_state.token = result["token"]
     st.session_state.user_id = result.get("user_id")
     st.session_state.username = result.get("username", "")
     st.session_state.pop("tx", None)
+    remember(result["token"])
 
 
 def logout(notice=None):
-    for key in ("token", "user_id", "tx", "page"):
+    for key in ("token", "user_id", "tx", "page", "report_xlsx", "report_pdf"):
         st.session_state.pop(key, None)
     st.session_state.username = ""
+    forget()
     if notice:
         st.session_state["notice"] = notice
 
@@ -128,8 +150,8 @@ def get_error(response):
         return response.text or "Có lỗi xảy ra"
 
 
-def api_call(method, path, timeout=60, timeout_msg="Backend phản hồi quá lâu.", **kwargs):
-    """Gọi backend. Trả về (thành_công, dữ_liệu_hoặc_thông_báo_lỗi)."""
+def api_call(method, path, timeout=60, timeout_msg="Backend phản hồi quá lâu.", raw=False, **kwargs):
+    """Gọi backend. Trả về (thành_công, dữ_liệu_hoặc_thông_báo_lỗi). raw=True trả về bytes (tải file)."""
     headers = kwargs.pop("headers", {})
     token = st.session_state.get("token")
     if token:
@@ -150,10 +172,43 @@ def api_call(method, path, timeout=60, timeout_msg="Backend phản hồi quá l�
 
     if not response.ok:
         return False, get_error(response)
+    if raw:
+        return True, response.content
     try:
         return True, response.json()
     except ValueError:
         return False, "Backend trả về dữ liệu không hợp lệ."
+
+
+def restore_session():
+    """Khôi phục đăng nhập từ token trong URL (sau khi F5 / mở lại link)."""
+    if is_logged_in() or not REMEMBER_LOGIN or st.session_state.get("restore_tried"):
+        return
+    st.session_state["restore_tried"] = True
+
+    token = st.query_params.get(SESSION_PARAM)
+    if not token:
+        return
+
+    with st.spinner("Đang khôi phục phiên đăng nhập... " + COLD_START_HINT):
+        try:
+            response = http().get(
+                BACKEND_URL + "/me", headers={"Authorization": f"Bearer {token}"}, timeout=90
+            )
+        except requests.exceptions.RequestException:
+            notify("⚠️ Chưa khôi phục được phiên đăng nhập (server đang khởi động?). Hãy tải lại trang để thử lại.")
+            return
+
+    if response.status_code == 200:
+        try:
+            data = response.json()
+        except ValueError:
+            return
+        if data.get("token"):
+            start_session(data)  # token mới được gia hạn
+    elif response.status_code == 401:
+        forget()  # token hết hạn / không hợp lệ -> xóa khỏi URL
+        notify("⏰ Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.")
 
 
 @st.cache_data(ttl=30, show_spinner=False)
@@ -195,6 +250,10 @@ def fmt_money(value):
     return f"{safe_float(value):,.0f}".replace(",", ".") + " đ"
 
 
+def fmt_month(month):
+    return f"{month[5:]}/{month[:4]}"
+
+
 def show_dataframe(df, **kwargs):
     """Tương thích cả Streamlit cũ (use_container_width) lẫn mới (width='stretch')."""
     try:
@@ -203,12 +262,48 @@ def show_dataframe(df, **kwargs):
         st.dataframe(df, use_container_width=True, **kwargs)
 
 
+def show_budget_alerts(alerts):
+    for a in alerts or []:
+        detail = (f"**{a.get('label', '')}**: đã chi {fmt_money(a.get('spent'))} / "
+                  f"{fmt_money(a.get('monthly_limit'))} ({safe_float(a.get('percent')):.0f}%) trong tháng này.")
+        if a.get("level") == "over":
+            st.error("🔴 Vượt ngân sách! " + detail)
+        else:
+            st.warning("🟠 Sắp hết ngân sách. " + detail)
+
+
 def show_result(result, amount_label="💰 Số tiền"):
     c1, c2, c3 = st.columns(3)
     c1.metric(amount_label, fmt_money(result.get("amount")))
     c2.metric("📈 Loại" if result.get("transaction_type") == "Thu" else "📉 Loại", result.get("transaction_type", "Chi"))
     c3.metric("📁 Danh mục", result.get("category", "Khác"))
     st.write("**Mô tả:**", result.get("description", ""))
+    show_budget_alerts(result.get("budget_alerts"))
+
+
+def build_dataframe(rows):
+    df = pd.DataFrame(rows)
+    df["created_at"] = pd.to_datetime(df["created_at"], utc=True).dt.tz_convert(TIMEZONE)
+    df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0.0)
+    df["category"] = df["category"].fillna("Khác")
+    df["description"] = df["description"].fillna("")
+    df["month"] = df["created_at"].dt.strftime("%Y-%m")
+    return df
+
+
+def current_month():
+    return pd.Timestamp.now(tz=TIMEZONE).strftime("%Y-%m")
+
+
+def month_selector(label, key):
+    """Chọn tháng: gồm tháng hiện tại và mọi tháng đã có giao dịch (mới nhất trước)."""
+    months = {current_month()}
+    ok, transactions = load_transactions()
+    if ok:
+        rows = [t for t in transactions if isinstance(t, dict)]
+        if rows:
+            months |= set(build_dataframe(rows)["month"].unique())
+    return st.selectbox(label, sorted(months, reverse=True), key=key, format_func=fmt_month)
 
 
 # =========================================================
@@ -383,16 +478,6 @@ def page_bill():
 # PAGE: HISTORY & STATS
 # =========================================================
 
-def build_dataframe(rows):
-    df = pd.DataFrame(rows)
-    df["created_at"] = pd.to_datetime(df["created_at"], utc=True).dt.tz_convert(TIMEZONE)
-    df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0.0)
-    df["category"] = df["category"].fillna("Khác")
-    df["description"] = df["description"].fillna("")
-    df["month"] = df["created_at"].dt.strftime("%Y-%m")
-    return df
-
-
 def edit_section(fdf):
     with st.expander("✏️ Sửa / Xóa giao dịch"):
         labels = {
@@ -462,7 +547,7 @@ def page_history():
     f1, f2, f3, f4 = st.columns([1, 1, 1.5, 1.5])
     months = sorted(df["month"].unique(), reverse=True)
     month = f1.selectbox("📅 Tháng", ["Tất cả"] + months,
-                         format_func=lambda m: m if m == "Tất cả" else f"{m[5:]}/{m[:4]}")
+                         format_func=lambda m: m if m == "Tất cả" else fmt_month(m))
     ttype = f2.selectbox("Loại", ["Tất cả", "Thu", "Chi"])
     cats = f3.multiselect("Danh mục", sorted(df["category"].unique()))
     keyword = f4.text_input("🔎 Tìm theo mô tả")
@@ -540,6 +625,139 @@ def page_history():
 
 
 # =========================================================
+# PAGE: BUDGETS
+# =========================================================
+
+def page_budget():
+    st.subheader("🎯 Ngân sách theo tháng")
+    st.caption("Đặt hạn mức chi tiêu cho từng danh mục (hoặc tổng chi tiêu). "
+               "Hệ thống sẽ cảnh báo khi bạn dùng từ 80% và khi vượt ngân sách.")
+
+    month = month_selector("📅 Tháng", "budget_month")
+
+    ok, data = api_call("GET", "/budgets", params={"month": month})
+    if not ok:
+        st.error("❌ " + str(data))
+        return
+    items = data.get("items", []) if isinstance(data, dict) else []
+
+    if not items:
+        st.info("Bạn chưa đặt ngân sách nào. Hãy thêm ở form bên dưới 👇")
+    else:
+        over = [i for i in items if i["level"] == "over"]
+        warn = [i for i in items if i["level"] == "warning"]
+        if over:
+            st.error("🔴 Đã vượt ngân sách: " + ", ".join(i["label"] for i in over))
+        if warn:
+            st.warning("🟠 Sắp hết ngân sách: " + ", ".join(i["label"] for i in warn))
+        if not over and not warn:
+            st.success("🟢 Mọi khoản chi đang nằm trong ngân sách.")
+
+        for it in items:
+            percent = safe_float(it.get("percent"))
+            st.markdown(
+                f"{LEVEL_ICON.get(it['level'], '🟢')} **{it['label']}** · "
+                f"{fmt_money(it['spent'])} / {fmt_money(it['monthly_limit'])} ({percent:.0f}%)"
+            )
+            st.progress(min(max(percent, 0.0), 100.0) / 100.0)
+            remaining = safe_float(it.get("remaining"))
+            st.caption(f"Còn lại {fmt_money(remaining)}" if remaining >= 0
+                       else f"Vượt {fmt_money(-remaining)}")
+
+    st.divider()
+    st.markdown("##### ➕ Đặt / cập nhật ngân sách")
+    with st.form("budget_form", clear_on_submit=True):
+        c1, c2 = st.columns(2)
+        category = c1.selectbox("Danh mục", [TOTAL_LABEL] + EXPENSE_CATEGORIES)
+        limit = c2.number_input("Hạn mức mỗi tháng (VND)", min_value=0.0, value=0.0, step=100000.0)
+        submitted = st.form_submit_button("💾 Lưu ngân sách")
+
+    if submitted:
+        if limit <= 0:
+            st.warning("Hạn mức phải lớn hơn 0.")
+        else:
+            ok, res = api_call("PUT", "/budgets", json={"category": category, "monthly_limit": limit})
+            if ok:
+                notify(f"✅ Đã lưu ngân sách «{category}»: {fmt_money(limit)}/tháng.")
+                st.rerun()
+            else:
+                st.error("❌ " + str(res))
+
+    if items:
+        with st.expander("🗑️ Xóa ngân sách"):
+            labels = {i["id"]: f"{i['label']} ({fmt_money(i['monthly_limit'])})" for i in items}
+            picked = st.selectbox("Chọn ngân sách cần xóa", list(labels), format_func=labels.get)
+            if st.button("🗑️ Xóa ngân sách này"):
+                ok, res = api_call("DELETE", f"/budgets/{int(picked)}")
+                if ok:
+                    notify("🗑️ Đã xóa ngân sách!")
+                    st.rerun()
+                else:
+                    st.error("❌ " + str(res))
+
+
+# =========================================================
+# PAGE: REPORTS
+# =========================================================
+
+REPORT_FORMATS = {
+    "xlsx": ("📗 Tạo báo cáo Excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+    "pdf": ("📕 Tạo báo cáo PDF", "application/pdf"),
+}
+
+
+def page_report():
+    st.subheader("📑 Báo cáo thu chi theo tháng")
+    st.caption("Xuất báo cáo gồm tổng quan, chi tiêu theo danh mục, tình hình ngân sách và danh sách giao dịch.")
+
+    month = month_selector("📅 Chọn tháng", "report_month")
+
+    # Xem nhanh số liệu của tháng
+    ok, transactions = load_transactions()
+    if ok:
+        rows = [t for t in transactions if isinstance(t, dict)]
+        if rows:
+            df = build_dataframe(rows)
+            mdf = df[df["month"] == month]
+            income = mdf.loc[mdf["transaction_type"] == "Thu", "amount"].sum()
+            expense = mdf.loc[mdf["transaction_type"] == "Chi", "amount"].sum()
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("💵 Tổng thu", fmt_money(income))
+            c2.metric("💸 Tổng chi", fmt_money(expense))
+            c3.metric("💰 Số dư", fmt_money(income - expense))
+            c4.metric("🧾 Giao dịch", f"{len(mdf)}")
+
+    st.divider()
+
+    cols = st.columns(2)
+    for col, (fmt, (label, mime)) in zip(cols, REPORT_FORMATS.items()):
+        state_key = f"report_{fmt}"
+        with col:
+            if st.button(label, key=f"btn_{fmt}"):
+                with st.spinner("Đang tạo báo cáo..."):
+                    ok, content = api_call(
+                        "GET", "/reports/monthly", timeout=120, raw=True,
+                        timeout_msg="Tạo báo cáo quá lâu. Vui lòng thử lại.",
+                        params={"month": month, "format": fmt},
+                    )
+                if ok:
+                    st.session_state[state_key] = {"month": month, "data": content}
+                else:
+                    st.session_state.pop(state_key, None)
+                    st.error("❌ " + str(content))
+
+            saved = st.session_state.get(state_key)
+            if saved and saved["month"] == month:
+                st.download_button(
+                    f"⬇️ Tải {fmt.upper()} tháng {fmt_month(month)}",
+                    data=saved["data"],
+                    file_name=f"bao_cao_{month}.{fmt}",
+                    mime=mime,
+                    key=f"dl_{fmt}",
+                )
+
+
+# =========================================================
 # MAIN
 # =========================================================
 
@@ -556,6 +774,8 @@ def main_app():
         if st.button("🚪 Đăng xuất"):
             logout()
             st.rerun()
+        if REMEMBER_LOGIN:
+            st.caption("🔒 Trang này tự giữ đăng nhập qua đường link. Đừng chia sẻ link khi đang đăng nhập.")
 
     st.title("💰 Thu Chi AI Pro")
     st.write(f"Xin chào **{st.session_state.username}** 👋")
@@ -567,13 +787,17 @@ def main_app():
         "🤖 Nhập giao dịch": page_ai,
         "📷 Quét hóa đơn": page_bill,
         "📊 Lịch sử & Thống kê": page_history,
+        "🎯 Ngân sách": page_budget,
+        "📑 Báo cáo": page_report,
     }
-    # Dùng radio thay cho st.tabs: chỉ chạy code của trang đang chọn (tabs chạy cả 3 trang mỗi lần rerun).
+    # Dùng radio thay cho st.tabs: chỉ chạy code của trang đang chọn (tabs chạy cả các trang mỗi lần rerun).
     choice = st.radio("Điều hướng", list(pages), horizontal=True,
                       label_visibility="collapsed", key="page")
     st.divider()
     pages[choice]()
 
+
+restore_session()
 
 if is_logged_in():
     main_app()
