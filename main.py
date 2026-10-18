@@ -319,6 +319,13 @@ class AttemptLimiter:
                 return int(self.window - (now - dq[0])) + 1
         return 0
 
+    def attempts(self, key: str) -> int:
+        """Số lần sai hiện còn hiệu lực trong cửa sổ thời gian."""
+        now = time.monotonic()
+        with self._lock:
+            dq = self._prune(key, now)
+            return len(dq) if dq else 0
+
     def fail(self, key: str):
         now = time.monotonic()
         with self._lock:
@@ -706,7 +713,16 @@ def login(data: Credentials, request: Request):
     if user is None:
         login_limiter.fail(user_key)
         login_limiter.fail(ip_key)
-        raise HTTPException(401, "Sai tên đăng nhập hoặc mật khẩu")
+        used = login_limiter.attempts(user_key)
+        remaining = LOGIN_MAX_ATTEMPTS - used
+        minutes = max(1, LOGIN_WINDOW_SECONDS // 60)
+        if remaining > 0:
+            detail = (f"Sai tên đăng nhập hoặc mật khẩu. Bạn đã nhập sai {used}/{LOGIN_MAX_ATTEMPTS} lần, "
+                      f"còn {remaining} lần thử.")
+        else:
+            detail = (f"Bạn đã nhập sai {used}/{LOGIN_MAX_ATTEMPTS} lần. "
+                      f"Đăng nhập bị khóa tạm thời khoảng {minutes} phút.")
+        raise HTTPException(401, detail)
 
     login_limiter.reset(user_key)
     return auth_response(user["id"], user["username"], "Đăng nhập thành công")
