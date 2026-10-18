@@ -58,7 +58,7 @@ st.markdown(
 .stTabs [data-baseweb="tab-list"] { gap: 8px; background: rgba(226,232,240,0.6); padding: 6px; border-radius: 12px; }
 .stTabs [data-baseweb="tab"] { border-radius: 8px; padding: 8px 16px; color: #64748b; font-weight: 500; }
 .stTabs [aria-selected="true"] { background-color: #3b82f6 !important; color: #fff !important; }
-.stButton, [data-testid="stFormSubmitButton"], .stDownloadButton { width: 100% !important; }
+.stButton, [data-testid="stFormSubmitButton"], .stDownloadButton] { width: 100% !important; }
 [data-testid="stElementContainer"]:has(> .stButton),
 [data-testid="stElementContainer"]:has(> .stDownloadButton),
 [data-testid="stElementContainer"]:has([data-testid="stFormSubmitButton"]),
@@ -331,10 +331,10 @@ def month_selector(label, key):
     return st.selectbox(label, sorted(months, reverse=True), key=key, format_func=fmt_month)
 
 # =========================================================
-# MỤC LỤC 12 TÍNH NĂNG - NHẤP CHUYỂN TRANG
+# MỤC LỤC 12 TÍNH NĂNG - NẰM TRONG GIỚI THIỆU
 # =========================================================
 def feature_toc():
-    """Hiển thị mục lục 12 tính năng, nhấp để chuyển trang tương ứng"""
+    """Hiển thị mục lục 12 tính năng, nhấp để chuyển trang tương ứng — NẰM TRONG GIỚI THIỆU"""
     st.markdown("---")
     st.markdown("## 📋 MỤC LỤC 12 TÍNH NĂNG CHÍNH")
     
@@ -382,6 +382,8 @@ def show_intro():
             st.markdown(f.read())
     except (FileNotFoundError, OSError):
         st.markdown(DEFAULT_INTRO)
+    # === MỤC LỤC NẰM Ở ĐÂY — TRONG GIỚI THIỆU ===
+    feature_toc()
 
 def page_intro():
     show_intro()
@@ -808,8 +810,7 @@ def main_app():
     st.title("💰 Thu Chi AI Pro")
     st.write(f"Xin chào **{st.session_state.username}** 👋")
     
-    # === MỤC LỤC 12 TÍNH NĂNG ===
-    feature_toc()
+    # === BỎ MỤC LỤC Ở NGOẠI TRANG CHÍNH ===
     
     if notice := st.session_state.pop("notice", None):
         st.success(notice)
