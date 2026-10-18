@@ -1,4 +1,4 @@
-"""Thu Chi AI Pro - Phiên bản nâng cấp hoàn chỉnh."""
+"""Thu Chi AI Pro - Phiên bản đã tinh chỉnh (bỏ phụ lục)."""
 import html
 import os
 import time
@@ -119,20 +119,6 @@ st.markdown(
 [data-testid="stMetric"]:hover { transform: scale(1.02); }
 [data-testid="stMetricLabel"] { font-weight: 600; color: #475569; }
 [data-testid="stMetricValue"] { font-weight: 700; }
-.toc-btn > button {
-    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%) !important;
-    color: #1e40af !important;
-    border: 1px solid #bfdbfe !important;
-    font-weight: 500 !important;
-    font-size: 0.9rem;
-    min-height: 48px;
-    border-radius: 12px !important;
-}
-.toc-btn > button:hover {
-    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%) !important;
-    transform: translateY(-2px);
-    box-shadow: 0 8px 16px rgba(59,130,246,0.15);
-}
 .tx-card {
     display: flex; align-items: center; gap: 14px;
     background: rgba(255,255,255,0.95);
@@ -163,7 +149,6 @@ div[data-testid="stProgressBar"] > div { border-radius: 999px; }
     h1 { font-size: 1.5rem !important; }
     h2 { font-size: 1.15rem !important; }
     [data-testid="stForm"] { padding: 20px 16px !important; }
-    .toc-btn > button { min-height: 44px; font-size: 0.85rem; }
     .tx-card { padding: 12px; }
 }
 </style>
@@ -397,42 +382,7 @@ def month_selector(label, key):
     return st.selectbox(label, sorted(months, reverse=True), key=key, format_func=fmt_month)
 
 # =========================================================
-# MỤC LỤC 12 TÍNH NĂNG — TRONG GIỚI THIỆU
-# =========================================================
-def feature_toc():
-    st.markdown("---")
-    st.markdown("## 📋 MỤC LỤC 12 TÍNH NĂNG CHÍNH")
-    
-    features = [
-        ("🤖 Nhập giao dịch bằng AI", "🤖 Nhập giao dịch"),
-        ("✍️ Nhập thủ công", "🤖 Nhập giao dịch"),
-        ("📷 Quét hóa đơn", "📷 Quét hóa đơn"),
-        ("📋 Xem danh sách giao dịch", "📊 Lịch sử & Thống kê"),
-        ("🔎 Tìm & Lọc giao dịch", "📊 Lịch sử & Thống kê"),
-        ("✏️ Sửa / Xóa giao dịch", "📊 Lịch sử & Thống kê"),
-        ("📊 Thống kê & Biểu đồ", "📊 Lịch sử & Thống kê"),
-        ("🎯 Đặt ngân sách tháng", "🎯 Ngân sách"),
-        ("⚠️ Cảnh báo ngân sách", "🎯 Ngân sách"),
-        ("📗 Xuất báo cáo Excel", "📑 Báo cáo"),
-        ("📕 Xuất báo cáo PDF", "📑 Báo cáo"),
-        ("📖 Giới thiệu sản phẩm", "📖 Giới thiệu"),
-    ]
-    
-    for i in range(0, len(features), 3):
-        cols = st.columns(3)
-        for j, col in enumerate(cols):
-            if i + j < len(features):
-                label, target = features[i + j]
-                with col:
-                    st.markdown('<div class="toc-btn">', unsafe_allow_html=True)
-                    if st.button(label, key=f"toc_{i+j}"):
-                        st.session_state["page"] = target
-                        st.rerun()
-                    st.markdown("</div>", unsafe_allow_html=True)
-    st.markdown("---")
-
-# =========================================================
-# TRANG GIỚI THIỆU — CÓ MỤC LỤC
+# TRANG GIỚI THIỆU — ĐÃ BỎ PHỤ LỤC / MỤC LỤC
 # =========================================================
 DEFAULT_INTRO = """
 **💰 Thu Chi AI Pro** — Quản lý tài chính cá nhân thông minh với trí tuệ nhân tạo
@@ -455,7 +405,6 @@ DEFAULT_INTRO = """
 
 def show_intro():
     st.markdown(DEFAULT_INTRO)
-    feature_toc()
 
 def page_intro():
     show_intro()
