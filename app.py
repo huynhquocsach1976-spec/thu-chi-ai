@@ -1,5 +1,6 @@
 """Thu Chi AI Pro - Frontend (Streamlit)."""
 
+import html
 import os
 
 import pandas as pd
@@ -10,7 +11,7 @@ st.set_page_config(
     page_title="Thu Chi AI Pro",
     page_icon="💰",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="auto",
 )
 
 
@@ -68,8 +69,18 @@ st.markdown(
 .stTabs [data-baseweb="tab-list"] { gap: 8px; background: rgba(226,232,240,0.6); padding: 6px; border-radius: 12px; }
 .stTabs [data-baseweb="tab"] { border-radius: 8px; padding: 8px 16px; color: #64748b; font-weight: 500; }
 .stTabs [aria-selected="true"] { background-color: #3b82f6 !important; color: #fff !important; }
+.stButton, [data-testid="stFormSubmitButton"], .stDownloadButton { width: 100% !important; }
+[data-testid="stElementContainer"]:has(> .stButton),
+[data-testid="stElementContainer"]:has(> .stDownloadButton),
+[data-testid="stElementContainer"]:has([data-testid="stFormSubmitButton"]),
+div:has(> [data-testid="stFormSubmitButton"]),
+[data-testid="stFormSubmitButton"] { width: 100% !important; }
+[data-testid="stHeader"] { background: transparent !important; }
+/* Không cho cả trang bị trượt ngang trên điện thoại (bảng vẫn tự cuộn ngang bên trong) */
+[data-testid="stMainBlockContainer"] { overflow-x: clip; }
+[data-testid="stRadio"] { max-width: 100%; }
 .stButton > button, [data-testid="stFormSubmitButton"] > button, .stDownloadButton > button {
-    width: 100%; border-radius: 10px !important; font-weight: 600 !important;
+    width: 100%; min-height: 44px; border-radius: 10px !important; font-weight: 600 !important;
     background: linear-gradient(90deg, #3b82f6 0%, #2563eb 100%) !important;
     color: #fff !important; border: none !important; transition: all .25s ease !important;
 }
@@ -77,6 +88,68 @@ st.markdown(
     transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(59,130,246,.3);
 }
 label { color: #334155 !important; font-weight: 500; }
+
+/* Ẩn nút Deploy / menu / chân trang của Streamlit cho gọn */
+[data-testid="stToolbar"], [data-testid="stDecoration"], #MainMenu, footer { visibility: hidden; height: 0; }
+.stApp { padding-bottom: env(safe-area-inset-bottom); }
+
+/* Thanh điều hướng dạng "viên thuốc", vuốt ngang được */
+[data-testid="stRadioGroup"] {
+    flex-wrap: nowrap !important; overflow-x: auto; gap: 8px !important; padding: 4px 2px 8px;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none;
+}
+[data-testid="stRadioGroup"]::-webkit-scrollbar { display: none; }
+[data-testid="stRadioGroup"] > div { flex: 0 0 auto !important; width: auto !important; }
+[data-testid="stRadioOption"] {
+    display: flex !important; align-items: center; width: auto !important; min-height: 40px;
+    margin: 0 !important; padding: 6px 16px !important; white-space: nowrap;
+    background: rgba(255,255,255,0.9); border: 1px solid #e2e8f0; border-radius: 999px;
+}
+[data-testid="stRadioOption"] > div > div:first-child { display: none; }
+[data-testid="stRadioOption"] p { white-space: nowrap; margin: 0; }
+[data-testid="stRadioOption"]:has(input:checked) {
+    background: linear-gradient(90deg, #3b82f6 0%, #2563eb 100%); border-color: #2563eb;
+}
+[data-testid="stRadioOption"]:has(input:checked) p { color: #fff !important; font-weight: 600; }
+
+/* Thẻ giao dịch (chế độ xem gọn) */
+.tx-card { display: flex; align-items: center; gap: 12px; background: rgba(255,255,255,0.92);
+    border: 1px solid #e2e8f0; border-radius: 14px; padding: 12px 14px; margin-bottom: 8px;
+    box-shadow: 0 1px 2px rgba(15,23,42,0.04); }
+.tx-icon { flex: 0 0 40px; height: 40px; border-radius: 12px; background: #eff6ff;
+    display: flex; align-items: center; justify-content: center; font-size: 1.25rem; }
+.tx-main { flex: 1 1 auto; min-width: 0; }
+.tx-title { font-weight: 600; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tx-sub { font-size: 0.78rem; color: #64748b; margin-top: 2px; }
+.tx-amt { flex: 0 0 auto; font-weight: 700; white-space: nowrap; }
+.tx-in { color: #16a34a; } .tx-out { color: #dc2626; }
+
+/* ===== ĐIỆN THOẠI ===== */
+@media (max-width: 640px) {
+    .block-container, [data-testid="stMainBlockContainer"] { padding: 3rem 0.75rem 4rem !important; }
+    h1 { font-size: 1.6rem !important; line-height: 1.25 !important; }
+    h2, h3 { font-size: 1.15rem !important; }
+    [data-testid="stForm"] { padding: 14px 14px !important; border-radius: 14px !important; }
+    .stTabs [data-baseweb="tab"] { padding: 8px 10px; font-size: 0.9rem; }
+
+    /* Các ô số liệu xếp 2 cột thay vì mỗi ô một dòng */
+    [data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) { flex-wrap: wrap !important; gap: 0.5rem !important; }
+    [data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) > [data-testid="stColumn"],
+    [data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) > [data-testid="column"] {
+        flex: 1 1 calc(50% - 0.5rem) !important; min-width: calc(50% - 0.5rem) !important; width: auto !important;
+    }
+    /* Các ô chọn (bộ lọc, form) xếp 2 cột trên điện thoại */
+    [data-testid="stHorizontalBlock"]:has([data-testid="stSelectbox"]) { flex-wrap: wrap !important; gap: 0.5rem !important; }
+    [data-testid="stHorizontalBlock"]:has([data-testid="stSelectbox"]) > [data-testid="stColumn"],
+    [data-testid="stHorizontalBlock"]:has([data-testid="stSelectbox"]) > [data-testid="column"] {
+        flex: 1 1 calc(50% - 0.5rem) !important; min-width: calc(50% - 0.5rem) !important; width: auto !important;
+    }
+    [data-testid="stMetric"] { background: rgba(255,255,255,0.9); border: 1px solid #e2e8f0;
+        border-radius: 12px; padding: 10px 12px; }
+    [data-testid="stMetricLabel"] { font-size: 0.8rem; }
+    [data-testid="stMetricValue"] { font-size: 1.1rem !important; }
+    [data-testid="stMetricValue"] > div { white-space: normal !important; overflow: visible !important; text-overflow: clip !important; }
+}
 </style>
 """,
     unsafe_allow_html=True,
@@ -252,6 +325,33 @@ def fmt_money(value):
 
 def fmt_month(month):
     return f"{month[5:]}/{month[:4]}"
+
+
+CATEGORY_ICON = {
+    "Ăn uống": "🍜", "Di chuyển": "🚗", "Mua sắm": "🛍️", "Hóa đơn & Tiện ích": "💡", "Nhà ở": "🏠",
+    "Giải trí": "🎬", "Sức khỏe": "💊", "Giáo dục": "📚", "Lương": "💼", "Thưởng": "🎁",
+    "Đầu tư": "📈", "Khác": "📌",
+}
+
+
+def show_transaction_cards(df, limit=50):
+    """Danh sách giao dịch dạng thẻ: gọn, dễ đọc trên điện thoại."""
+    cards = []
+    for r in df.head(limit).itertuples():
+        is_income = r.transaction_type == "Thu"
+        title = html.escape(r.description or "(không mô tả)")
+        sub = html.escape(f"{r.category} · {r.created_at:%d/%m/%Y %H:%M}")
+        sign = "+" if is_income else "-"
+        cards.append(
+            '<div class="tx-card">'
+            f'<div class="tx-icon">{CATEGORY_ICON.get(r.category, "📌")}</div>'
+            f'<div class="tx-main"><div class="tx-title">{title}</div><div class="tx-sub">{sub}</div></div>'
+            f'<div class="tx-amt {"tx-in" if is_income else "tx-out"}">{sign}{fmt_money(r.amount)}</div>'
+            '</div>'
+        )
+    st.markdown("".join(cards), unsafe_allow_html=True)
+    if len(df) > limit:
+        st.caption(f"Đang hiển thị {limit}/{len(df)} giao dịch mới nhất. Dùng bộ lọc để thu hẹp danh sách.")
 
 
 def show_dataframe(df, **kwargs):
@@ -636,13 +736,16 @@ def page_history():
         "created_at": "Thời gian", "transaction_type": "Loại", "category": "Danh mục",
         "description": "Mô tả", "amount": "Số tiền",
     })
-    show_dataframe(
-        view, hide_index=True,
-        column_config={
-            "Thời gian": st.column_config.DatetimeColumn(format="DD/MM/YYYY HH:mm"),
-            "Số tiền": st.column_config.NumberColumn(format="%.0f đ"),
-        },
-    )
+    if st.toggle("📱 Xem dạng thẻ (gọn cho điện thoại)", key="card_view"):
+        show_transaction_cards(fdf)
+    else:
+        show_dataframe(
+            view, hide_index=True,
+            column_config={
+                "Thời gian": st.column_config.DatetimeColumn(format="DD/MM/YYYY HH:mm"),
+                "Số tiền": st.column_config.NumberColumn(format="%.0f đ"),
+            },
+        )
     st.download_button(
         "⬇️ Tải CSV",
         data=view.assign(**{"Thời gian": view["Thời gian"].dt.strftime("%Y-%m-%d %H:%M")})
