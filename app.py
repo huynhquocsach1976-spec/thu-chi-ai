@@ -307,6 +307,38 @@ def month_selector(label, key):
 
 
 # =========================================================
+# INTRODUCTION (dùng cho cả trang đăng nhập và trong app)
+# =========================================================
+
+DEFAULT_INTRO = """
+**Thu Chi AI Pro** là ứng dụng quản lý tài chính cá nhân dùng trí tuệ nhân tạo.
+
+- 🤖 **Nhập giao dịch bằng câu nói tự nhiên**: ví dụ "ăn cơm 40k", "nhận lương 20 triệu".
+- 📷 **Quét hóa đơn**: chụp ảnh hóa đơn, AI tự đọc số tiền và lưu giao dịch.
+- 📊 **Lịch sử & thống kê**: lọc theo tháng, loại, danh mục; xem biểu đồ; sửa hoặc xóa giao dịch.
+- 🎯 **Ngân sách**: đặt hạn mức theo danh mục, nhận cảnh báo khi sắp hết hoặc vượt.
+- 📑 **Báo cáo tháng**: xuất file Excel hoặc PDF.
+"""
+
+
+def show_intro():
+    st.markdown("### 📚 Tài liệu giới thiệu sản phẩm")
+    try:
+        with open("README.md", "r", encoding="utf-8") as f:
+            st.markdown(f.read())
+    except (FileNotFoundError, OSError):
+        st.markdown(DEFAULT_INTRO)
+
+
+def page_intro():
+    show_intro()
+
+
+def toggle_intro_login():
+    st.session_state["show_intro_login"] = not st.session_state.get("show_intro_login", False)
+
+
+# =========================================================
 # AUTH PAGE
 # =========================================================
 
@@ -325,6 +357,11 @@ def auth_page():
 
         if notice := st.session_state.pop("notice", None):
             st.warning(notice)
+
+        st.button("📖 Giới thiệu sản phẩm", on_click=toggle_intro_login, key="btn_intro_login")
+        if st.session_state.get("show_intro_login"):
+            with st.expander("📖 Giới thiệu sản phẩm", expanded=True):
+                show_intro()
 
         login_tab, register_tab, readme_tab = st.tabs(["🔐 Đăng nhập", "📝 Đăng ký", "📖 Giới thiệu"])
 
@@ -378,14 +415,7 @@ def auth_page():
                         st.error("❌ " + (str(result) if not ok else "Backend không trả về token."))
 
         with readme_tab:
-            st.markdown("### 📚 Tài liệu giới thiệu sản phẩm")
-            try:
-                with open("README.md", "r", encoding="utf-8") as f:
-                    st.markdown(f.read())
-            except FileNotFoundError:
-                st.info("Chưa tìm thấy file `README.md` trong thư mục dự án.")
-            except OSError as e:
-                st.error(f"Không thể đọc README.md: {e}")
+            show_intro()
 
 
 # =========================================================
@@ -761,6 +791,13 @@ def page_report():
 # MAIN
 # =========================================================
 
+INTRO_PAGE = "📖 Giới thiệu"
+
+
+def go_intro():
+    st.session_state["page"] = INTRO_PAGE
+
+
 def main_app():
     with st.sidebar:
         st.title("💰 Thu Chi AI Pro")
@@ -771,6 +808,7 @@ def main_app():
         else:
             st.error("🔴 Backend Offline")
         st.divider()
+        st.button("📖 Giới thiệu", on_click=go_intro, key="btn_intro")
         if st.button("🚪 Đăng xuất"):
             logout()
             st.rerun()
@@ -789,6 +827,7 @@ def main_app():
         "📊 Lịch sử & Thống kê": page_history,
         "🎯 Ngân sách": page_budget,
         "📑 Báo cáo": page_report,
+        INTRO_PAGE: page_intro,
     }
     # Dùng radio thay cho st.tabs: chỉ chạy code của trang đang chọn (tabs chạy cả các trang mỗi lần rerun).
     choice = st.radio("Điều hướng", list(pages), horizontal=True,
